@@ -1,12 +1,15 @@
+"""
+Wrapper class for train, test or validation DTU dataset.
+"""
+import os
 import cv2
 import numpy as np
 import torch
-import os
 
 from torch.utils.data import Dataset
-from src.utils.pfm import read_pfm_file
 from PIL import Image
 from torchvision import transforms
+from src.utils.pfm import read_pfm_file
 
 
 def view_ids_top_three():

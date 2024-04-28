@@ -1,5 +1,5 @@
 import unittest
-from src.datasets.dtu.datamodule import DtuDataModule
+from src.datasets.dtu.datamodule import DTUDataModule
 
 class TestCalculations(unittest.TestCase):
     pass

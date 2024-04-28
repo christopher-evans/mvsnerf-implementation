@@ -1,14 +1,11 @@
 
 import torch
-from inplace_abn import InPlaceABN
+#from inplace_abn import InPlaceABN
 
 class MVSNet(torch.nn.Module):
 
     def __init__(
-        self,
-        num_groups=1,
-        norm_act=InPlaceABN,
-        levels=1
+        self
     ):
         super(MVSNet, self).__init__()
 

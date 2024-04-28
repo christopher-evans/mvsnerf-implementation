@@ -58,19 +58,32 @@ Additional, configurable directories are:
 ## Code quality
 
 ### Tests
-"""
-   Send a message to a recipient.
 
-   :param str sender: The person sending the message
-   :param str recipient: The recipient of the message
-   :param str message_body: The body of the message
-   :param priority: The priority of the message, can be a number 1-5
-   :type priority: integer or None
-   :return: the message id
-   :rtype: int
-   :raises ValueError: if the message_body exceeds 160 characters
-   :raises TypeError: if the message_body is not a basestring
-   """
+Tests use [pytest](https://docs.pytest.org/en/8.2.x/) and are configured with the `pytest.ini` file.  To run
+tests:
+```bash
+pytest
+```
+from the source directory. To generate a coverage report, run
+```bash
+pytest --cov-report term --cov=src test/
+```
+
+Tests are located in the `test` directory, with file structure corresponding to the `src` directory.
+
+### Linting
+
+Linting uses [pylint](https://pypi.org/project/pylint/) and is configured by the `.pylintrc` file.
+To lint the source files, run:
+```bash
+pylint ./src
+```
+from the repository root.
+
+Similarly for the test directory:
+```bash
+pylint ./test
+```
 
 ## Tensorboard
 
