@@ -10,11 +10,11 @@ This is both for the understanding of the author, and to update to [PyTorch Ligh
 Target  Python versions are 3.10 and 3.11.  With one of these installed, set up a virtual environment:
 
 ```bash
-➜  mkdir venv-mvsnerf               
-➜  python -m venv venv-mvsnerf 
-➜  source venv-mvsnerf/bin/activate
+➜  mkdir venv-src               
+➜  python -m venv venv-src 
+➜  source venv-src/bin/activate
 ➜  which python
-/home/r2tp/Repos/venv-mvsnerf/bin/python
+/home/r2tp/Repos/venv-src/bin/python
 ➜  python -V
 Python 3.11.8
 ```
@@ -24,6 +24,19 @@ Then install the project dependencies:
 ```bash
 ➜  pip install -r requirements.txt
 ```
+
+Finally, install inplace_abn manually:
+```bash
+git clone https://github.com/mapillary/inplace_abn.git
+cd inplace_abn
+python3 setup.py install
+```
+
+## Datasets
+
+### DTU
+
+See [src/datasets/dtu/README.md](src/datasets/dtu/README.md) for documentation.
 
 
 ## Project structure
@@ -42,6 +55,22 @@ Additional, configurable directories are:
 * `.configs`: configuration files, used for selection of train/test/validation splits
 * `.experiments`: location for tensorboard logs and checkpoints
 
+## Code quality
+
+### Tests
+"""
+   Send a message to a recipient.
+
+   :param str sender: The person sending the message
+   :param str recipient: The recipient of the message
+   :param str message_body: The body of the message
+   :param priority: The priority of the message, can be a number 1-5
+   :type priority: integer or None
+   :return: the message id
+   :rtype: int
+   :raises ValueError: if the message_body exceeds 160 characters
+   :raises TypeError: if the message_body is not a basestring
+   """
 
 ## Tensorboard
 
