@@ -1,37 +1,36 @@
 """
 Wrapper class for train, test or validation DTU dataset.
 """
-import os
-import cv2
 import numpy as np
 import torch
 
 from torch.utils.data import Dataset
-from PIL import Image
-from torchvision import transforms
-from src.utils.pfm import read_pfm_file
+from datasets.dtu.utils.depth_image import DepthImage
+from datasets.dtu.utils.mvs_image import MvsImage
+from dataclasses import dataclass
 
 
-def view_ids_top_three():
-    return list(range(3))
+@dataclass
+class DataMatrices:
+    """Matrices for camera intrinsic and extrinsic description."""
+    world_to_camera: np.ndarray
+    camera_to_world: np.ndarray
+    depth_bound: np.ndarray
+    image_warp: np.ndarray
+    intrinsic_params: np.ndarray
+    affine_map: np.ndarray
+    affine_map_inverse: np.ndarray
 
 
-def view_ids_rand_top_five():
-    return torch.randperm(5)[:3]
-
-
-def get_transforms():
-    """
-    Define transforms for images: map to [0, 1] RGB values and normalize.
-
-    TODO: script to calculate mean and std for this function
-    """
-    return transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ]
-    )
+@dataclass
+class DataPoint:
+    """Matrices for camera intrinsic and extrinsic description."""
+    scan_id: np.ndarray
+    viewpoint_ids: np.ndarray
+    lighting_id: np.ndarray
+    mvs_images: torch.Tensor
+    depth_maps: np.ndarray
+    matrices: DataMatrices
 
 
 class DTUDataset(Dataset):
@@ -39,114 +38,102 @@ class DTUDataset(Dataset):
     def __init__(
         self,
         mvs_configurations,
-        view_id_sampler,
-        viewpoint_index_map,
-        projection_matrices,
-        intrinsic_parameters,
-        world_to_cameras,
-        cameras_to_worlds,
+        camera_matrices,
         data_dir: str = ".data/processed/dtu_example",
-        max_length=-1,
-        scale_factor=1.0 / 200,
         down_sample=1.0,
+        scale_factor=1.0 / 200,
+        max_length=-1
     ):
         super().__init__()
 
         self.mvs_configurations = mvs_configurations
-        self.view_id_sampler = view_id_sampler
-        self.viewpoint_index_map = viewpoint_index_map
+        self.camera_matrices = camera_matrices
         self.data_dir = data_dir
         self.max_length = max_length
-        self.scale_factor = scale_factor
         self.down_sample = down_sample
-
-        self.projection_matrices = projection_matrices
-        self.intrinsic_parameters = intrinsic_parameters
-        self.world_to_cameras = world_to_cameras
-        self.cameras_to_worlds = cameras_to_worlds
-
-        # image transforms to apply to data
-        self.transforms = get_transforms()
+        self.scale_factor = scale_factor
 
     def __len__(self):
-        return len(self.mvs_configurations) if self.max_length <= 0 else self.max_length
+        return len(self.mvs_configurations) if self.max_length <= 0 else min(self.max_length,
+                                                                             len(self.mvs_configurations))
 
-    def read_depth(self, depth_map_filename):
-        # TODO: documented dimensions here seem que
-        depth_h = np.array(read_pfm_file(depth_map_filename)[0], dtype=np.float32)  # (800, 800)
-        depth_h = cv2.resize(depth_h, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)  # (600, 800)
-        depth_h = depth_h[44:556, 80:720]  # (512, 640)
-        depth_h = cv2.resize(depth_h, None, fx=self.down_sample, fy=self.down_sample, interpolation=cv2.INTER_NEAREST)
-        depth = cv2.resize(depth_h, None, fx=1.0 / 4, fy=1.0 / 4, interpolation=cv2.INTER_NEAREST)
-        mask = depth > 0
+    def read_mvs_image(self, image_file_name):
+        return MvsImage(image_file_name).read(self.down_sample)
 
-        return depth, mask, depth_h
+    def read_depth_image(self, depth_map_filename):
+        return DepthImage(depth_map_filename).read(down_sample=self.down_sample) * self.scale_factor
+
+    def mvs_image_file_name(self, scan_id, viewpoint_id, lighting_id):
+        return f'{self.data_dir}/Rectified/{scan_id}_train/rect_{viewpoint_id + 1:03d}_{lighting_id}_r5000.png'
+
+    def depth_image_file_name(self, scan_id, viewpoint_id):
+        return f'{self.data_dir}/Depths/{scan_id}/depth_map_{viewpoint_id:04d}.pfm'
 
     def __getitem__(self, index):
-        sample = {}
-        scan, lighting_id, reference_view, source_views = self.mvs_configurations[index]
-        # TODO: switched the order of the reference view and source due to logic below for projection matrices
-        view_ids = [reference_view] + [source_views[index] for index in self.view_id_sampler()]
+        mvs_config = self.mvs_configurations[index]
+        reference_view = mvs_config.reference_view
+        source_views = mvs_config.source_views.fetch()
+        lighting_condition_id = mvs_config.lighting_condition_id
 
-        affine_mat, affine_mat_inv = [], []
-        images, depths_h = [], []
-        proj_mats, intrinsics, w2cs, c2ws, near_fars = [], [], [], [], []  # record proj mats between views
-        for index, view_id in enumerate(view_ids):
+        reference_view_matrices = self.camera_matrices[reference_view]
+        reference_projection_matrix = reference_view_matrices.projection_matrix
+        reference_projection_inverse = np.linalg.inv(reference_projection_matrix)
 
-            # NOTE that the id in image file names is from 1 to 49 (not 0~48)
-            image_filename = f'{self.data_dir}/Rectified/{scan}_train/rect_{view_id + 1:03d}_{lighting_id}_r5000.png'
-            depth_filename = f'{self.data_dir}/Depths/{scan}/depth_map_{view_id:04d}.pfm'
+        # initialize with reference view data
+        world_to_camera_matrices = [reference_view_matrices.world_to_camera]
+        camera_to_world_matrices = [reference_view_matrices.camera_to_world]
+        depth_bound_matrices = [reference_view_matrices.depth_bounds]
+        image_warp_matrices = [np.eye(4)]
+        intrinsic_param_matrices = [reference_view_matrices.intrinsic_params]
+        affine_map_matrices = [reference_projection_matrix]
+        affine_map_inverse_matrices = [reference_projection_inverse]
 
-            image = Image.open(image_filename)
-            image_wh = np.round(np.array(image.size) * self.down_sample).astype('int')
-            image = image.resize(image_wh, resample=Image.Resampling.BILINEAR)
-            image = self.transforms(image)
-            images += [image]
+        # initialize images with reference view data
+        image_file_name = self.mvs_image_file_name(mvs_config.scan_id, reference_view, mvs_config.lighting_condition_id)
+        depth_file_name = self.depth_image_file_name(mvs_config.scan_id, reference_view)
 
-            index_mat = self.viewpoint_index_map[view_id]
-            proj_mat_ls, near_far = self.projection_matrices[index_mat]
-            intrinsics.append(self.intrinsic_parameters[index_mat])
-            w2cs.append(self.world_to_cameras[index_mat])
-            c2ws.append(self.cameras_to_worlds[index_mat])
+        mvs_images = [self.read_mvs_image(image_file_name)]
+        depth_maps = [self.read_depth_image(depth_file_name)]
 
-            affine_mat.append(proj_mat_ls)
-            affine_mat_inv.append(np.linalg.inv(proj_mat_ls))
-            if index == 0:  # reference view
-                ref_proj_inv = np.linalg.inv(proj_mat_ls)
-                proj_mats += [np.eye(4)]
-            else:
-                proj_mats += [proj_mat_ls @ ref_proj_inv]
+        for viewpoint_id in source_views:
+            image_file_name = self.mvs_image_file_name(mvs_config.scan_id, viewpoint_id,
+                                                       mvs_config.lighting_condition_id)
+            depth_file_name = self.depth_image_file_name(mvs_config.scan_id, viewpoint_id)
 
-            if os.path.exists(depth_filename):
-                depth, mask, depth_h = self.read_depth(depth_filename)
-                depth_h *= self.scale_factor
-                depths_h.append(depth_h)
-            else:
-                depths_h.append(np.zeros((1, 1)))
+            mvs_images.append(self.read_mvs_image(image_file_name))
+            depth_maps.append(self.read_depth_image(depth_file_name))
 
-            near_fars.append(near_far)
+            camera_matrices = self.camera_matrices[viewpoint_id]
+            projection_matrix = camera_matrices.projection_matrix
 
-        images = torch.stack(images).float()
+            world_to_camera_matrices.append(camera_matrices.world_to_camera)
+            camera_to_world_matrices.append(camera_matrices.camera_to_world)
+            depth_bound_matrices.append(camera_matrices.depth_bounds)
+            intrinsic_param_matrices.append(camera_matrices.intrinsic_params)
+            affine_map_matrices.append(camera_matrices.projection_matrix)
+            affine_map_inverse_matrices.append(np.linalg.inv(projection_matrix))
+            image_warp_matrices.append(projection_matrix @ reference_projection_inverse)
 
-        depths_h = np.stack(depths_h)
-        proj_mats = np.stack(proj_mats)[:, :3]
-        affine_mat, affine_mat_inv = np.stack(affine_mat), np.stack(affine_mat_inv)
-        intrinsics, w2cs, c2ws, near_fars = np.stack(intrinsics), np.stack(w2cs), np.stack(c2ws), np.stack(near_fars)
-        view_ids_all = [reference_view] + list(source_views) if type(source_views[0]) is not list else [j for sub in source_views for j in sub]
-        c2ws_all = np.array([self.cameras_to_worlds[self.viewpoint_index_map[i]] for i in view_ids_all])
+        mvs_images = torch.stack(mvs_images).float()
+        depth_maps = np.stack(depth_maps)
 
-        sample['images'] = images  # (V, H, W, 3)
-        sample['depths_h'] = depths_h.astype(np.float32)  # (V, H, W)
-        sample['w2cs'] = w2cs.astype(np.float32)  # (V, 4, 4)
-        sample['c2ws'] = c2ws.astype(np.float32)  # (V, 4, 4)
-        sample['near_fars'] = near_fars.astype(np.float32)
-        sample['proj_mats'] = proj_mats.astype(np.float32)
-        sample['intrinsics'] = intrinsics.astype(np.float32)  # (V, 3, 3)
-        sample['view_ids'] = np.array(view_ids)
-        sample['light_id'] = np.array(lighting_id)
-        sample['affine_mat'] = affine_mat
-        sample['affine_mat_inv'] = affine_mat_inv
-        sample['scan'] = scan
-        sample['c2ws_all'] = c2ws_all.astype(np.float32)
+        world_to_camera_matrices, camera_to_world_matrices = np.stack(world_to_camera_matrices), np.stack(camera_to_world_matrices)
+        depth_bound_matrices = np.stack(depth_bound_matrices)
+        intrinsic_param_matrices = np.stack(intrinsic_param_matrices)
+        affine_map_matrices, affine_map_inverse_matrices = np.stack(affine_map_matrices), np.stack(affine_map_inverse_matrices)
+        image_warp_matrices = np.stack(image_warp_matrices)[:, :3]
 
-        return sample
+        return {
+            'scan_id': mvs_config.scan_id,
+            'viewpoint_ids': [reference_view] + source_views,
+            'lighting_id': lighting_condition_id,
+            'mvs_images': mvs_images,
+            'depth_maps': depth_maps.astype(np.float32),
+            'world_to_camera': world_to_camera_matrices.astype(np.float32),
+            'camera_to_world': camera_to_world_matrices.astype(np.float32),
+            'depth_bound': depth_bound_matrices.astype(np.float32),
+            'image_warp': image_warp_matrices.astype(np.float32),
+            'intrinsic_param_matrices': intrinsic_param_matrices.astype(np.float32),
+            'affine_map_matrices': affine_map_matrices,
+            'affine_map_inverse_matrices': affine_map_inverse_matrices,
+        }
