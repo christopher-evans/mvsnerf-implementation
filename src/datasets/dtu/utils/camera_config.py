@@ -4,18 +4,35 @@ from dataclasses import dataclass
 
 @dataclass
 class CameraMatrices:
-    """Matrices for camera intrinsic and extrinsic description."""
+    """
+    Matrices for plane sweep cost calculations and depth bounds.
+    """
     world_to_camera: np.ndarray
     camera_to_world: np.ndarray
     intrinsic_params: np.ndarray
     projection_matrix: np.ndarray
-    depth_bounds: []
+    depth_bounds: tuple
 
     def __getitem__(self, keys):
+        """
+        Accessor for object properties.
+
+        :param keys: Keys to retrieve
+        :return: Values for provided keys
+        """
         return tuple(getattr(self, k) for k in keys)
 
 
 def parse_file(file_name, scale_factor, down_sample):
+    """
+    Parse values from a camera configuration file and map these to camera parameters
+    and depth values for the viewpoint.
+
+    :param file_name: File containing camera configuration
+    :param scale_factor: Scale factor for depth information for an image
+    :param down_sample: Down sampling factor for image resolution
+    :return: Intrinsic and extrinsic matrices, min and max depth values
+    """
     # read camera configuration file
     with open(file_name, encoding='utf-8') as camera_config:
         lines = [line.rstrip() for line in camera_config.readlines()]
@@ -31,6 +48,8 @@ def parse_file(file_name, scale_factor, down_sample):
     # TODO: why scaling by 4 here?
     # see comment: https://github.com/jzhangbs/Vis-MVSNet/issues/15
     # appears to be difference between depth maps and image resolution
+    # Note also intrinsics should probably have 0.0 / 4.0 and 44.0 / 4.0 added
+    # see https://github.com/idiap/GeoNeRF/blob/main/data/dtu.py#L161C9-L162C57
     intrinsic_params[:2] = intrinsic_params[:2] * down_sample * 4
 
     # depth_min & depth_interval: line 11
@@ -42,6 +61,14 @@ def parse_file(file_name, scale_factor, down_sample):
 
 
 def create_matrices(extrinsic_params, intrinsic_params, depth_bounds):
+    """
+    Create matrices for plane sweep and depth bounds from extrinsic and extrinsic parameters.
+
+    :param extrinsic_params: Camera extrinsic parameters
+    :param intrinsic_params: Camera extrinsic parameters
+    :param depth_bounds: Min and max depth values for viewpoint
+    :return: Camera matrices
+    """
     world_to_camera = extrinsic_params
     camera_to_world = np.linalg.inv(world_to_camera)
 
@@ -60,5 +87,14 @@ def create_matrices(extrinsic_params, intrinsic_params, depth_bounds):
 
 
 def load_camera_matrices(data_dir, viewpoint_id, scale_factor, down_sample):
+    """
+    Load all matrices needed for plane sweep from a configuration file.
+
+    :param data_dir: Location of camera data
+    :param viewpoint_id: Viewpoint ID
+    :param scale_factor: Scale factor for depth data
+    :param down_sample: Down sampling of image resolution
+    :return: Camera matrices
+    """
     camera_config_file = f'{data_dir}/Cameras/train/{viewpoint_id:08d}_cam.txt'
     return create_matrices(*parse_file(camera_config_file, scale_factor, down_sample))

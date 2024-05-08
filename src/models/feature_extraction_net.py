@@ -2,7 +2,7 @@ import torch.nn as nn
 from inplace_abn import InPlaceABN as BatchNormActivation
 
 
-class FeatureExtractionNet:
+class FeatureExtractionNet(nn.Module):
     def __init__(self, in_channels=3):
         super(FeatureExtractionNet, self).__init__()
 

@@ -2,7 +2,7 @@ import torch.nn as nn
 from inplace_abn import InPlaceABN as BatchNormActivation
 
 
-class VolumeEncodingNet:
+class VolumeEncodingNet(nn.Module):
     def __init__(self, in_channels=3):
         super(VolumeEncodingNet, self).__init__()
 

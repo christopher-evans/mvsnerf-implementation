@@ -18,7 +18,7 @@ class MvsConfiguration:
 def get_lighting_conditions(stage):
     """
     Fetch lighting conditions to use for images.  In the training process all lighting conditions 0-6 are
-    used.  For testing lighting condition 6 is used, thought to be the brightest by the authors of MVSNeRF.
+    used.  For testing lighting condition 3 is used, thought to be the brightest by the authors of MVSNeRF.
 
     :param stage:
     :return:
@@ -31,25 +31,17 @@ def get_lighting_conditions(stage):
 
 class DTUDataModule(LightningDataModule):
     def __init__(
-        self,
-        data_dir: str = ".data/processed/dtu_example",
-        config_dir: str = ".configs/dtu_example/split_example",
-        batch_size: int = 2,
-        scale_factor=1.0 / 200,
-        down_sample=1.0,
-        max_length=-1
+            self,
+            data_dir: str = '.data/processed/dtu_example',
+            config_dir: str = '.configs/dtu_example/split_example',
+            batch_size: int = 2,
+            scale_factor=1.0 / 200,
+            down_sample=1.0,
+            max_length=-1
     ):
-        """
-        :param data_dir:
-        :param config_dir:
-        :param batch_size:
-        :param scale_factor:
-        :param down_sample:
-        :param max_length:
-        """
         super().__init__()
-        self.data_dir = data_dir.rstrip("/")
-        self.config_dir = config_dir.rstrip("/")
+        self.data_dir = data_dir.rstrip('/')
+        self.config_dir = config_dir.rstrip('/')
         self.batch_size = int(batch_size)
         self.scale_factor = float(scale_factor)
         self.down_sample = float(down_sample)
@@ -71,10 +63,13 @@ class DTUDataModule(LightningDataModule):
         source_view_sampler = SourceViews.rand_k_top_n()
         if stage != 'fit':
             source_view_sampler = SourceViews.top_k()
-        image_pairings = load_image_pairings(f'{self.config_dir}/image_pairing.txt', source_view_sampler)
+        image_pairings, all_viewpoint_ids = load_image_pairings(
+            f'{self.config_dir}/image_pairing.txt',
+            source_view_sampler
+        )
 
         self.build_mvs_configurations(stage, image_pairings)
-        self.build_camera_matrices(image_pairings)
+        self.build_camera_matrices(all_viewpoint_ids)
 
     def build_mvs_configurations(self, stage, image_pairings):
         """
@@ -90,12 +85,11 @@ class DTUDataModule(LightningDataModule):
 
         # TODO: put lighting conditions somewhere
         lighting_conditions = get_lighting_conditions(stage)
-        scan_config_file = f'{self.config_dir}/{stage.lower()}.txt'
-        scan_ids = load_scans(scan_config_file, stage)
+        scan_ids = load_scans(self.config_dir, stage)
 
         for scan_id in scan_ids:
-            for reference_view in image_pairings.iterator():
-                source_views = image_pairings.fetch(reference_view)
+            for reference_view in image_pairings:
+                source_views = image_pairings[reference_view]
 
                 for lighting_condition_id in lighting_conditions:
                     self.mvs_configurations += [MvsConfiguration(
@@ -105,18 +99,14 @@ class DTUDataModule(LightningDataModule):
                         source_views=source_views
                     )]
 
-    def build_camera_matrices(self, image_pairings):
-        viewpoint_ids = image_pairings.fetch_all_viewpoint_ids()
-
-        for viewpoint_id in viewpoint_ids:
-            camera_config_file = f'{self.data_dir}/Cameras/train/{viewpoint_id:08d}_cam.txt'
-            camera_config = load_camera_matrices(
-                camera_config_file,
+    def build_camera_matrices(self, all_viewpoint_ids):
+        for viewpoint_id in all_viewpoint_ids:
+            camera_matrices = load_camera_matrices(
+                self.data_dir,
                 viewpoint_id,
                 scale_factor=self.scale_factor,
                 down_sample=self.down_sample
             )
-            camera_matrices = camera_config.fetch_matrices()
 
             self.camera_matrices[viewpoint_id] = camera_matrices
 
