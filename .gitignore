@@ -241,3 +241,4 @@ cython_debug/
 .data/
 .experiments/
 .lightning_logs/
+lightning_logs/

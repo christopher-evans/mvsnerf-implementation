@@ -34,7 +34,7 @@ class DTUDataModule(LightningDataModule):
             self,
             data_dir: str = '.data/processed/dtu_example',
             config_dir: str = '.configs/dtu_example/split_example',
-            batch_size: int = 2,
+            batch_size: int = 1,
             scale_factor=1.0 / 200,
             down_sample=1.0,
             max_length=-1

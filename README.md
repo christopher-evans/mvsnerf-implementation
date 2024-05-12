@@ -2,7 +2,11 @@
 
 This project re-implements the MVSNeRF model ([paper](https://arxiv.org/abs/2103.15595) and [code](https://github.com/apchenstu/mvsnerf)).
 
-This is both for the understanding of the author, and to update to [PyTorch Lightning 2](https://lightning.ai/docs/pytorch/stable/upgrade/migration_guide.html) API.
+The aims are to:
+* Update to the [PyTorch Lightning 2](https://lightning.ai/docs/pytorch/stable/upgrade/migration_guide.html) API.
+* Improve test coverage of the codebase and improve code quality
+* Document and provide tools to process training data
+* Support batch sizes greater than one during training
 
 
 ## Python
@@ -14,7 +18,7 @@ Target  Python versions are 3.10 and 3.11.  With one of these installed, set up 
 ➜  python -m venv venv-src 
 ➜  source venv-src/bin/activate
 ➜  which python
-/home/r2tp/Repos/venv-src/bin/python
+/path/to/venv-src/bin/python
 ➜  python -V
 Python 3.11.8
 ```
@@ -32,11 +36,27 @@ cd inplace_abn
 python3 setup.py install
 ```
 
+
+## Running
+
+Ensure the venv is loaded and the script is executable:
+```bash
+➜  which python
+/path/to/venv-src/bin/python
+➜  chmod +x mvsnerf.sh
+```
+
+Run the bash script `mvsnerf.sh` with one of `train`, `validate`, `fine_tune` or `infer` as the first argument.
+Running with `-h` flag shows all required and available arguments.
+```bash
+./mvsnerf.sh train -h
+```
+
 ## Datasets
 
 ### DTU
 
-See [src/datasets/dtu/README.md](src/datasets/dtu/README.md) for documentation.
+See [src/datasets/dtu](src/datasets/dtu) for documentation.
 
 
 ## Project structure

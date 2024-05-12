@@ -45,10 +45,10 @@ class VolumeEncodingNet(nn.Module):
 
     def forward(self, x):
         first_layer = self.first_convolution(x)
-        first_down_sample = self.first_down_sample(x)
-        second_down_sample = self.second_down_sample(x)
+        first_down_sample = self.first_down_sample(first_layer)
+        second_down_sample = self.second_down_sample(first_down_sample)
 
-        x = self.third_down_sample(x)
+        x = self.third_down_sample(second_down_sample)
         x = second_down_sample + self.first_up_sample(x)
         del second_down_sample
 

@@ -34,4 +34,7 @@ class FeatureExtractionNet(nn.Module):
         )
 
     def forward(self, x):
-        return self.convolutions(x)
+        batch_size, viewpoints, channels, height, width = x.shape
+
+        features = self.convolutions(x.reshape(batch_size * viewpoints, channels, height, width))
+        return features.view(batch_size, viewpoints, *features.shape[1:])

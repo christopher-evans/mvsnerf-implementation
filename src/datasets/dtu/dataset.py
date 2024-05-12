@@ -107,8 +107,13 @@ class DTUDataset(Dataset):
             np.stack(affine_map_matrices),
             np.stack(affine_map_inverse_matrices)
         )
+
+        # final row is identity
+        # TODO check why / why remove
         image_warp_matrices = np.stack(image_warp_matrices)[:, :3]
 
+        # TODO: why np not torch here?
+        # also check if dtype conversions can be done on load
         return {
             'scan_id': mvs_config.scan_id,
             'viewpoint_ids': [reference_view] + source_views,
