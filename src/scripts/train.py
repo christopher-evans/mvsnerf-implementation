@@ -7,6 +7,12 @@ from datasets.dtu.datamodule import DTUDataModule
 from lightning.pytorch.callbacks import DeviceStatsMonitor
 
 def train(args):
+    """
+    Train MVSNeRF.
+
+    :param args: Command line parameters
+    :type args: argparse.Namespace
+    """
     # init the autoencoder
     hparams = HyperParameters(
         learning_rate=args.learning_rate
