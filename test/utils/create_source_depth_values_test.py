@@ -4,6 +4,31 @@ import pytest
 from utils.cost_volume import create_source_depth_values
 
 
+def test_create_source_depth_values_data_type():
+    """Test `create_source_depth_values` returns tensor with correct data type"""
+    batch_size = 2
+    image_height = 2
+    image_width = 3
+    depth_resolution = 3
+    data_type = torch.float16
+    depth_bounds = torch.tensor([
+        [1, 2],
+        [3, 4]
+    ], dtype=data_type)
+    source_translation = torch.tensor([[0, 0, 0], [0, 0, 0]]) \
+        .reshape(batch_size, 3, 1)
+
+    source_depth_values = create_source_depth_values(
+        depth_bounds,
+        image_height,
+        image_width,
+        depth_resolution,
+        source_translation
+    )
+
+    assert source_depth_values.dtype == data_type, 'data type matches'
+
+
 def test_create_reference_depth_values():
     """Test `create_source_depth_values` with no translation returns all zeros"""
     batch_size = 2
@@ -13,7 +38,7 @@ def test_create_reference_depth_values():
     depth_bounds = torch.tensor([
         [1, 2],
         [3, 4]
-    ])
+    ], dtype=torch.float32)
     source_translation = torch.tensor([[0, 0, 0], [0, 0, 0]]) \
         .reshape(batch_size, 3, 1)
 
@@ -66,7 +91,7 @@ def test_create_source_depth_values_single_offset_batch1(test_name, offset_axis,
     depth_resolution = 3
     depth_bounds = torch.tensor([
         [depth_min, depth_max]
-    ])
+    ], dtype=torch.float32)
     translation_vector = torch.zeros((1, 3))
     translation_vector[0][offset_axis] = offset_value
     source_translation = translation_vector.reshape(batch_size, 3, 1)
@@ -134,7 +159,7 @@ def test_create_source_depth_values_multiple_offset_batch2():
     depth_bounds = torch.tensor([
         [depth_min_first_batch, depth_max_first_batch],
         [depth_min_second_batch, depth_max_second_batch],
-    ])
+    ], dtype=torch.float32)
 
     offset_first_batch = 1
     offset_second_batch = -1

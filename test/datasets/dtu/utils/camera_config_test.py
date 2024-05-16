@@ -48,8 +48,8 @@ def test_image_pairings_valid_file(dtu_data_path, test_camera_matrices):
     actual_camera_matrices = load_camera_matrices(
         dtu_data_path,
         test_viewpoint_id,
-        scale_factor=test_scale_factor,
-        down_sample=test_down_sample
+        depth_scale_factor=test_scale_factor,
+        image_down_sample=test_down_sample
     )
 
     assert np.allclose(

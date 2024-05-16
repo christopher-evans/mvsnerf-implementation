@@ -6,6 +6,17 @@ from datasets.dtu.utils.camera_config import load_camera_matrices
 from datasets.dtu.utils.scan_config import load_scans
 from dataclasses import dataclass
 
+
+@dataclass
+class DTUParameters:
+    data_dir: str
+    data_config_dir: str
+    batch_size: int
+    data_max_length: int
+    depth_scale_factor: float
+    image_down_sample: float
+
+
 @dataclass
 class MvsConfiguration:
     """Configuration for an MVS problem."""
@@ -30,22 +41,14 @@ def get_lighting_conditions(stage):
 
 
 class DTUDataModule(LightningDataModule):
-    def __init__(
-            self,
-            data_dir: str = '.data/processed/dtu_example',
-            config_dir: str = '.configs/dtu_example/split_example',
-            batch_size: int = 1,
-            scale_factor=1.0 / 200,
-            down_sample=1.0,
-            max_length=-1
-    ):
+    def __init__(self, dtu_parameters):
         super().__init__()
-        self.data_dir = data_dir.rstrip('/')
-        self.config_dir = config_dir.rstrip('/')
-        self.batch_size = int(batch_size)
-        self.scale_factor = float(scale_factor)
-        self.down_sample = float(down_sample)
-        self.max_length = int(max_length)
+        self.data_dir = dtu_parameters.data_dir.rstrip('/')
+        self.config_dir = dtu_parameters.data_config_dir.rstrip('/')
+        self.batch_size = int(dtu_parameters.batch_size)
+        self.depth_scale_factor = float(dtu_parameters.depth_scale_factor)
+        self.image_down_sample = float(dtu_parameters.image_down_sample)
+        self.max_length = int(dtu_parameters.data_max_length)
 
         # MVS problem configurations
         self.mvs_configurations = []
@@ -104,8 +107,8 @@ class DTUDataModule(LightningDataModule):
             camera_matrices = load_camera_matrices(
                 self.data_dir,
                 viewpoint_id,
-                scale_factor=self.scale_factor,
-                down_sample=self.down_sample
+                depth_scale_factor=self.depth_scale_factor,
+                image_down_sample=self.image_down_sample
             )
 
             self.camera_matrices[viewpoint_id] = camera_matrices
@@ -116,12 +119,12 @@ class DTUDataModule(LightningDataModule):
                 self.mvs_configurations,
                 self.camera_matrices,
                 data_dir=self.data_dir,
-                scale_factor=self.scale_factor,
-                down_sample=self.down_sample,
+                depth_scale_factor=self.depth_scale_factor,
+                image_down_sample=self.image_down_sample,
                 max_length=self.max_length,
             ),
             shuffle=True,
-            num_workers=8,
+            num_workers=4,
             batch_size=self.batch_size,
             pin_memory=True
         )
@@ -132,14 +135,14 @@ class DTUDataModule(LightningDataModule):
                 self.mvs_configurations,
                 self.camera_matrices,
                 data_dir=self.data_dir,
-                scale_factor=self.scale_factor,
-                down_sample=self.down_sample,
-                max_length=self.max_length,
+                depth_scale_factor=self.depth_scale_factor,
+                image_down_sample=self.image_down_sample,
+                max_length=10,
             ),
             shuffle=False,
             num_workers=4,
             batch_size=self.batch_size,
-            pin_memory=True
+            pin_memory=True,
         )
 
     def test_dataloader(self):
@@ -148,8 +151,8 @@ class DTUDataModule(LightningDataModule):
                 self.mvs_configurations,
                 self.camera_matrices,
                 data_dir=self.data_dir,
-                scale_factor=self.scale_factor,
-                down_sample=self.down_sample,
+                depth_scale_factor=self.depth_scale_factor,
+                image_down_sample=self.image_down_sample,
                 max_length=self.max_length,
             ),
             shuffle=False,
@@ -164,8 +167,8 @@ class DTUDataModule(LightningDataModule):
                 self.mvs_configurations,
                 self.camera_matrices,
                 data_dir=self.data_dir,
-                scale_factor=self.scale_factor,
-                down_sample=self.down_sample,
+                depth_scale_factor=self.depth_scale_factor,
+                image_down_sample=self.image_down_sample,
                 max_length=self.max_length,
             ),
             shuffle=False,

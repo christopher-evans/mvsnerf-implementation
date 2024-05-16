@@ -3,15 +3,17 @@
 This project re-implements the MVSNeRF model ([paper](https://arxiv.org/abs/2103.15595) and [code](https://github.com/apchenstu/mvsnerf)).
 
 The aims are to:
+* Document and provide tools to process training data, run experiments and evaluate the model
+* Increase the range of parameters and input augmentations which can be adjusted on the model
+* Support batch sizes greater than one during training
+* Remove dependency on depth data for training images
 * Update to the [PyTorch Lightning 2](https://lightning.ai/docs/pytorch/stable/upgrade/migration_guide.html) API.
 * Improve test coverage of the codebase and improve code quality
-* Document and provide tools to process training data
-* Support batch sizes greater than one during training
 
 
 ## Python
 
-Target  Python versions are 3.10 and 3.11.  With one of these installed, set up a virtual environment:
+Target  Python versions are 3.10, 3.11 and 3.12.  With one of these installed, set up a virtual environment:
 
 ```bash
 ➜  mkdir venv-src               

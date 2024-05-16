@@ -23,14 +23,14 @@ class CameraMatrices:
         return tuple(getattr(self, k) for k in keys)
 
 
-def parse_file(file_name, scale_factor, down_sample):
+def parse_file(file_name, depth_scale_factor, image_down_sample):
     """
     Parse values from a camera configuration file and map these to camera parameters
     and depth values for the viewpoint.
 
     :param file_name: File containing camera configuration
-    :param scale_factor: Scale factor for depth information for an image
-    :param down_sample: Down sampling factor for image resolution
+    :param depth_scale_factor: Scale factor for depth information for an image
+    :param image_down_sample: Down sampling factor for image resolution
     :return: Intrinsic and extrinsic matrices, min and max depth values
     """
     # read camera configuration file
@@ -40,7 +40,7 @@ def parse_file(file_name, scale_factor, down_sample):
     # extrinsic parameters: lines 1-4 define a 4×4 matrix
     extrinsic_params_flat = np.fromstring(' '.join(lines[1:5]), dtype=np.float32, sep=' ')
     extrinsic_params = extrinsic_params_flat.reshape((4, 4))
-    extrinsic_params[:3, 3] *= scale_factor
+    extrinsic_params[:3, 3] *= depth_scale_factor
 
     # intrinsics parameters: lines 7-9 define a 3×3 matrix
     intrinsic_params_flat = np.fromstring(' '.join(lines[7:10]), dtype=np.float32, sep=' ')
@@ -50,12 +50,12 @@ def parse_file(file_name, scale_factor, down_sample):
     # appears to be difference between depth maps and image resolution
     # Note also intrinsics should probably have 0.0 / 4.0 and 44.0 / 4.0 added
     # see https://github.com/idiap/GeoNeRF/blob/main/data/dtu.py#L161C9-L162C57
-    intrinsic_params[:2] = intrinsic_params[:2] * down_sample * 4
+    intrinsic_params[:2] = intrinsic_params[:2] * image_down_sample * 4
 
     # depth_min & depth_interval: line 11
     # TODO: why the factor of 192?
-    depth_min = float(lines[11].split()[0]) * scale_factor
-    depth_max = depth_min + float(lines[11].split()[1]) * 192 * scale_factor
+    depth_min = float(lines[11].split()[0]) * depth_scale_factor
+    depth_max = depth_min + float(lines[11].split()[1]) * 192 * depth_scale_factor
 
     return extrinsic_params, intrinsic_params, (depth_min, depth_max)
 
@@ -86,15 +86,16 @@ def create_matrices(extrinsic_params, intrinsic_params, depth_bounds):
     )
 
 
-def load_camera_matrices(data_dir, viewpoint_id, scale_factor, down_sample):
+def load_camera_matrices(data_dir, viewpoint_id, depth_scale_factor, image_down_sample):
     """
     Load all matrices needed for plane sweep from a configuration file.
 
     :param data_dir: Location of camera data
     :param viewpoint_id: Viewpoint ID
-    :param scale_factor: Scale factor for depth data
-    :param down_sample: Down sampling of image resolution
+    :param depth_scale_factor: Scale factor for depth data
+    :param image_down_sample: Down sampling of image resolution
     :return: Camera matrices
     """
+    #WIP
     camera_config_file = f'{data_dir}/Cameras/train/{viewpoint_id:08d}_cam.txt'
-    return create_matrices(*parse_file(camera_config_file, scale_factor, down_sample))
+    return create_matrices(*parse_file(camera_config_file, depth_scale_factor, image_down_sample))

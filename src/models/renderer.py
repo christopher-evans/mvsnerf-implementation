@@ -31,7 +31,7 @@ class Renderer(nn.Module):
             x_encoding_frequencies=10,
             volume_encoding_channels=8,
             image_colour_channels=3,
-            view_count=4,
+            view_count=3,
             hidden_layer_neurons=256,
             hidden_layer_count=6,
             skip_connection_index=4,
@@ -59,7 +59,7 @@ class Renderer(nn.Module):
         self.lr_zero = LinearRelu(volume_encoding_channels + view_count * image_colour_channels, hidden_layer_neurons)
 
         # weight layer for viewing direction
-        x_encoded_dimension = (x_encoding_frequencies + 1) * 3
+        x_encoded_dimension = (2 * x_encoding_frequencies + 1) * 3
         self.lr_one = LinearRelu(x_encoded_dimension, hidden_layer_neurons)
 
         # weight layers 2, ..., hidden_layer_count
@@ -76,7 +76,7 @@ class Renderer(nn.Module):
         self.density_out = LinearRelu(hidden_layer_neurons, 1)
 
         # final two layers combine direction and hidden layer outputs to predict colour
-        self.lr_direction = LinearRelu(3 * x_encoding_frequencies + hidden_layer_neurons, hidden_layer_neurons)
+        self.lr_direction = LinearRelu(3 * 2 * direction_encoding_frequencies + hidden_layer_neurons, hidden_layer_neurons)
         self.colour_out = LinearRelu(hidden_layer_neurons, image_colour_channels)
 
     def init_weights(self):
@@ -86,39 +86,48 @@ class Renderer(nn.Module):
         self.density_out.apply(weights_init)
         self.colour_out.apply(weights_init)
 
-    def forward(self, x, d, f, c):
+    def forward(self, view_positions, view_directions, volume_features, colours):
         """
         Forward pass through renderer network.
 
-        :param x: Novel view position
-        :param d: Novel view direction
-        :param f: Volume encoding
-        :param c: Colour data of images at point
+        :param view_positions: Novel view positions
+        :type view_positions: tensor[batch_size * ray_count * ray_sample_count, 3]
+
+        :param view_directions: Novel view directions
+        :type view_directions: tensor[batch_size * ray_count * ray_sample_count, 3]
+
+        :param volume_features: Volume features
+        :type view_directions: tensor[batch_size * ray_count * ray_sample_count, 8]
+
+        :param colours: Colour data of images at positions
+        :type view_directions: tensor[batch_size * ray_count * ray_sample_count, image_channels * source_views]
+
         :return: Predicted colour and density
+        :rtype: tuple[tensor[], tensor[]]
         """
         # PE_0
-        x = self.x_positional_encoding(x)
+        view_positions = self.x_positional_encoding(view_positions)
 
         # LR_0
-        lr_0 = self.lr_zero(torch.cat([f, c], dim=1))
+        lr_0 = self.lr_zero(torch.cat([volume_features, colours], dim=1))
 
         # LR_1
-        values = self.lr_one(x)
+        values = self.lr_one(view_positions)
 
         # LR_2,...,hidden_layer_count
         for (layer_index, lr_i) in enumerate(self.lr_i):
+            values = values * lr_0
             if layer_index == self.skip_connection_index:
                 # add inputs for skip connection
-                values = torch.cat([x, values], -1)
+                values = torch.cat([view_positions, values], -1)
 
-            values = torch.einsum('ik,jk->i', values, lr_0)
             values = lr_i(values)
 
         # density value
         sigma = self.density_out(values)
 
         # colour value
-        d_positional_encoding = self.d_positional_encoding(d)
+        d_positional_encoding = self.d_positional_encoding(view_directions)
         values = self.lr_direction(torch.cat([values, d_positional_encoding], dim=1))
         values = self.colour_out(values)
 

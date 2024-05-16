@@ -200,6 +200,7 @@ def build_volume_features(
     padding=12,
     depth_resolution=128
 ):
+    # TODO pydocs for dimensions
     # fetch dimensions from input data
     batch_size, viewpoints, feature_channels, height, width = image_features.shape
     _, _, image_channels, _, _ = source_images.shape
@@ -282,7 +283,7 @@ def build_volume_features(
         del source_volume, source_feature, image_warp_matrix, source_grid
 
     # add variance metric to volume features
-    count = 1.0 / grid_masks
+    count = (1.0 / grid_masks).unsqueeze(dim=1)
     volume_features[:, :32] = volume_square_sum * count - (volume_sum * count) ** 2
 
     return volume_features

@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from torch.utils.data import Dataset
-from datasets.dtu.utils.depth_image import load_depth_image
+#from datasets.dtu.utils.depth_image import load_depth_image
 from datasets.dtu.utils.mvs_image import load_mvs_image
 
 
@@ -15,8 +15,8 @@ class DTUDataset(Dataset):
         mvs_configurations,
         camera_matrices,
         data_dir: str = '.data/processed/dtu_example',
-        down_sample=1.0,
-        scale_factor=1.0 / 200,
+        image_down_sample=1.0 / 4,
+        depth_scale_factor=1.0 / 200,
         max_length=-1
     ):
         super().__init__()
@@ -25,8 +25,8 @@ class DTUDataset(Dataset):
         self.camera_matrices = camera_matrices
         self.data_dir = data_dir
         self.max_length = max_length
-        self.down_sample = down_sample
-        self.scale_factor = scale_factor
+        self.image_down_sample = image_down_sample
+        self.depth_scale_factor = depth_scale_factor
 
     def __len__(self):
         return len(self.mvs_configurations) if self.max_length <= 0 else min(
@@ -47,6 +47,7 @@ class DTUDataset(Dataset):
         # initialize with reference view data
         world_to_camera_matrices = [reference_view_matrices.world_to_camera]
         camera_to_world_matrices = [reference_view_matrices.camera_to_world]
+        # TODO rename as just depth bounds
         depth_bound_matrices = [reference_view_matrices.depth_bounds]
         image_warp_matrices = [np.eye(4)]
         intrinsic_param_matrices = [reference_view_matrices.intrinsic_params]
@@ -59,14 +60,14 @@ class DTUDataset(Dataset):
             mvs_config.scan_id,
             reference_view,
             mvs_config.lighting_condition_id,
-            self.down_sample
+            self.image_down_sample
         )]
-        depth_maps = [load_depth_image(
-            self.data_dir,
-            mvs_config.scan_id,
-            reference_view,
-            self.down_sample
-        )]
+        # depth_maps = [load_depth_image(
+        #     self.data_dir,
+        #     mvs_config.scan_id,
+        #     reference_view,
+        #     self.down_sample
+        # )]
 
         for viewpoint_id in source_views:
             mvs_images.append(load_mvs_image(
@@ -74,14 +75,14 @@ class DTUDataset(Dataset):
                 mvs_config.scan_id,
                 viewpoint_id,
                 mvs_config.lighting_condition_id,
-                self.down_sample
+                self.image_down_sample
             ))
-            depth_maps.append(load_depth_image(
-                self.data_dir,
-                mvs_config.scan_id,
-                viewpoint_id,
-                self.down_sample
-            ))
+            # depth_maps.append(load_depth_image(
+            #     self.data_dir,
+            #     mvs_config.scan_id,
+            #     viewpoint_id,
+            #     self.down_sample
+            # ))
 
             camera_matrices = self.camera_matrices[viewpoint_id]
             projection_matrix = camera_matrices.projection_matrix
@@ -95,7 +96,7 @@ class DTUDataset(Dataset):
             image_warp_matrices.append(projection_matrix @ reference_projection_inverse)
 
         mvs_images = torch.stack(mvs_images).float()
-        depth_maps = np.stack(depth_maps)
+        #depth_maps = np.stack(depth_maps)
 
         world_to_camera_matrices, camera_to_world_matrices = (
             np.stack(world_to_camera_matrices),
@@ -119,7 +120,7 @@ class DTUDataset(Dataset):
             'viewpoint_ids': [reference_view] + source_views,
             'lighting_id': lighting_condition_id,
             'mvs_images': mvs_images,
-            'depth_maps': depth_maps.astype(np.float32),
+            #'depth_maps': depth_maps.astype(np.float32),
             'world_to_camera_matrices': world_to_camera_matrices.astype(np.float32),
             'camera_to_world_matrices': camera_to_world_matrices.astype(np.float32),
             'depth_bounds': depth_bound_matrices.astype(np.float32),
