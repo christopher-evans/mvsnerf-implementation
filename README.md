@@ -11,6 +11,11 @@ The aims are to:
 * Improve test coverage of the codebase and improve code quality
 
 
+## Status
+
+This repository is in the early stages of development; features will be listed here as they are completed.
+[Pull requests](https://github.com/christopher-evans/mvsnerf-implementation/pulls) are welcome!
+
 ## Python
 
 Target  Python versions are 3.10, 3.11 and 3.12.  With one of these installed, set up a virtual environment:
