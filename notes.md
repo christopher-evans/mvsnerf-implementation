@@ -34,12 +34,14 @@ For docs: export PYTHONPATH=/home/r2tp/Repos/mvsnerf-implementation:$PYTHONPATH
 Build docs: sphinx-build -M html docs/source/ docs/build/
 TODO: use sphinx argparse
 TODO: deploy docs with github actions
-TODO: doc docs
+TODO: write docs
+TODO: upload code coverage to codeclimate
 
 Argparse: https://realpython.com/command-line-interfaces-python-argparse/
 
 ## Parameters
 
+- select bottom viewpoints instead of top during training
 - down sample
 - scale factor
 - cropping / resizing, could jitter
@@ -60,3 +62,11 @@ Argparse: https://realpython.com/command-line-interfaces-python-argparse/
 - rendering re-use depth candidates or not
 - add reconstruction cost for source images (regularization ? )
 - jitter the offsets for ray marching to sub-pixels and interpolate
+
+
+- use resnet and more layers in feature extraction
+- increase depth and neurons in MLP
+- float16/32
+- bigger 3d resnet?
+- add the masks as inputs to MLP (as in original implementation)
+- increase depth resolution

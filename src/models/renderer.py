@@ -4,11 +4,12 @@ import torch.nn as nn
 from models.positional_encoding import PositionalEncoding
 
 
-def weights_init(m):
-    if isinstance(m, nn.Linear):
-        nn.init.kaiming_normal_(m.weight.data)
-        if m.bias is not None:
-            nn.init.zeros_(m.bias.data)
+def weights_init(module):
+    if isinstance(module, nn.Linear):
+        nn.init.kaiming_normal_(module.weight)
+
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
 
 
 class LinearRelu(nn.Module):
@@ -131,4 +132,4 @@ class Renderer(nn.Module):
         values = self.lr_direction(torch.cat([values, d_positional_encoding], dim=1))
         values = self.colour_out(values)
 
-        return values, sigma
+        return torch.sigmoid(values), sigma

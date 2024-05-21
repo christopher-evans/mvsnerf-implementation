@@ -72,7 +72,7 @@ def create_train_parser(actions):
     train_hyperparameters.add_argument(
         '--epoch_count',
         type=int,
-        default=10,
+        default=6,
         help='Number of epochs for training'
     )
 
@@ -98,13 +98,13 @@ def create_train_parser(actions):
     train_rendering.add_argument(
         '--ray_march_count',
         type=int,
-        default=256,
+        default=1024,
         help='If ray_direction_random_sampling is set, the number of samples to use'
     )
     train_rendering.add_argument(
         '--ray_march_sample_count',
         type=int,
-        default=64,
+        default=128,
         help='Number of depth samples to take along each ray'
     )
 

@@ -7,25 +7,29 @@ The aims are to:
 * Increase the range of parameters and input augmentations which can be adjusted on the model
 * Support batch sizes greater than one during training
 * Remove dependency on depth data for training images
-* Update to the [PyTorch Lightning 2](https://lightning.ai/docs/pytorch/stable/upgrade/migration_guide.html) API.
+* Update to the [PyTorch Lightning 2](https://lightning.ai/docs/pytorch/stable/upgrade/migration_guide.html) API, enabling better support for CUDA 12.x.
 * Improve test coverage of the codebase and improve code quality
 
 
 ## Status
 
+[![Code Climate maintainability](https://codeclimate.com/github/christopher-evans/mvsnerf-implementation.png)](https://codeclimate.com/github/christopher-evans/mvsnerf-implementation)
+
+
 This repository is in the early stages of development; features will be listed here as they are completed.
 [Pull requests](https://github.com/christopher-evans/mvsnerf-implementation/pulls) are welcome!
+
 
 ## Python
 
 Target  Python versions are 3.10, 3.11 and 3.12.  With one of these installed, set up a virtual environment:
 
 ```bash
-➜  mkdir venv-src               
-➜  python -m venv venv-src 
-➜  source venv-src/bin/activate
+➜  mkdir venv               
+➜  python -m venv venv 
+➜  source venv/bin/activate
 ➜  which python
-/path/to/venv-src/bin/python
+/path/to/venv/bin/python
 ➜  python -V
 Python 3.11.8
 ```
@@ -36,10 +40,17 @@ Then install the project dependencies:
 ➜  pip install -r requirements.txt
 ```
 
+If running tests, linting or building documentation, install the development requirements:
+
+```bash
+➜  pip install -r requirements_dev.txt
+```
+
 Finally, install inplace_abn manually:
 ```bash
 git clone https://github.com/mapillary/inplace_abn.git
 cd inplace_abn
+git checkout -b tag-v1.1.0 tags/v1.1.0
 python3 setup.py install
 ```
 
@@ -49,7 +60,7 @@ python3 setup.py install
 Ensure the venv is loaded and the script is executable:
 ```bash
 ➜  which python
-/path/to/venv-src/bin/python
+/path/to/venv/bin/python
 ➜  chmod +x mvsnerf.sh
 ```
 
@@ -58,6 +69,15 @@ Running with `-h` flag shows all required and available arguments.
 ```bash
 ./mvsnerf.sh train -h
 ```
+
+### Tensorboard
+
+To display tensorboard logs:
+
+```bash
+tensorboard --logdir .experiments
+```
+
 
 ## Datasets
 
@@ -82,6 +102,7 @@ Additional, configurable directories are:
 * `.configs`: configuration files, used for selection of train/test/validation splits
 * `.experiments`: location for tensorboard logs and checkpoints
 
+
 ## Code quality
 
 ### Tests
@@ -93,10 +114,11 @@ pytest
 ```
 from the source directory. To generate a coverage report, run
 ```bash
-pytest --cov-report term --cov=src test/
+pytest --cov-report term --cov src test/
 ```
 
 Tests are located in the `test` directory, with file structure corresponding to the `src` directory.
+
 
 ### Linting
 
@@ -107,18 +129,25 @@ pylint ./src
 ```
 from the repository root.
 
-Similarly for the test directory:
+Similarly, for the test directory:
 ```bash
 pylint ./test
 ```
 
-## Tensorboard
-
-To display tensorboard logs:
-
-```bash
-tensorboard --logdir .experiments
-```
-
 This command should provide a local URL for viewing the run details.
 
+
+## Documentation
+
+### Location
+
+TODO
+
+### Building
+
+Documentation is located in `docs/` and built with [Sphinx](https://www.sphinx-doc.org/en/master/).
+To build the documentation locally:
+```bash
+cd docs/
+make html
+```

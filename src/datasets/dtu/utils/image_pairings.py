@@ -69,7 +69,7 @@ def load_image_pairings(file_name, source_view_sampler, expected_source_view_cou
     :param file_name: Configuration file name
     :param source_view_sampler: Selection method for source views, `SourceViews::top_k` or `SourceViews::rand_n_top_k`.
     :param expected_source_view_count: Expected number of source views in configuration file
-    :return: Mapping from reference views (all possible viewpoints) to source views
+    :return: Mapping from target views (all possible viewpoints) to source views
     """
     pairings = dict()
     viewpoint_id_dict = {}
@@ -80,7 +80,7 @@ def load_image_pairings(file_name, source_view_sampler, expected_source_view_cou
         num_viewpoint = int(image_pairing_config.readline())
 
         for _ in range(num_viewpoint):
-            reference_view = int(image_pairing_config.readline().rstrip())
+            target_view = int(image_pairing_config.readline().rstrip())
             source_views = [int(view_id) for view_id in image_pairing_config.readline().rstrip().split()[1::2]]
             if len(source_views) != expected_source_view_count:
                 raise IndexError(
@@ -90,10 +90,10 @@ def load_image_pairings(file_name, source_view_sampler, expected_source_view_cou
                     )
                 )
 
-            pairings[reference_view] = SourceViews(source_views, source_view_sampler)
+            pairings[target_view] = SourceViews(source_views, source_view_sampler)
 
             # mark viewpoints as present in dict
-            viewpoint_id_dict[reference_view] = True
+            viewpoint_id_dict[target_view] = True
             for source_view in source_views:
                 viewpoint_id_dict[source_view] = True
 

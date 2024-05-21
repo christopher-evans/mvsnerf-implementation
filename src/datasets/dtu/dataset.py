@@ -36,8 +36,9 @@ class DTUDataset(Dataset):
 
     def __getitem__(self, index):
         mvs_config = self.mvs_configurations[index]
-        reference_view = mvs_config.reference_view
+        target_view = mvs_config.target_view
         source_views = mvs_config.source_views.fetch()
+        reference_view = source_views.pop(0)
         lighting_condition_id = mvs_config.lighting_condition_id
 
         reference_view_matrices = self.camera_matrices[reference_view]
@@ -47,8 +48,7 @@ class DTUDataset(Dataset):
         # initialize with reference view data
         world_to_camera_matrices = [reference_view_matrices.world_to_camera]
         camera_to_world_matrices = [reference_view_matrices.camera_to_world]
-        # TODO rename as just depth bounds
-        depth_bound_matrices = [reference_view_matrices.depth_bounds]
+        depth_bounds = [reference_view_matrices.depth_bounds]
         image_warp_matrices = [np.eye(4)]
         intrinsic_param_matrices = [reference_view_matrices.intrinsic_params]
         affine_map_matrices = [reference_projection_matrix]
@@ -58,7 +58,7 @@ class DTUDataset(Dataset):
         mvs_images = [load_mvs_image(
             self.data_dir,
             mvs_config.scan_id,
-            reference_view,
+            target_view,
             mvs_config.lighting_condition_id,
             self.image_down_sample
         )]
@@ -69,7 +69,7 @@ class DTUDataset(Dataset):
         #     self.down_sample
         # )]
 
-        for viewpoint_id in source_views:
+        for viewpoint_id in source_views + [target_view]:
             mvs_images.append(load_mvs_image(
                 self.data_dir,
                 mvs_config.scan_id,
@@ -89,7 +89,7 @@ class DTUDataset(Dataset):
 
             world_to_camera_matrices.append(camera_matrices.world_to_camera)
             camera_to_world_matrices.append(camera_matrices.camera_to_world)
-            depth_bound_matrices.append(camera_matrices.depth_bounds)
+            depth_bounds.append(camera_matrices.depth_bounds)
             intrinsic_param_matrices.append(camera_matrices.intrinsic_params)
             affine_map_matrices.append(camera_matrices.projection_matrix)
             affine_map_inverse_matrices.append(np.linalg.inv(projection_matrix))
@@ -102,28 +102,27 @@ class DTUDataset(Dataset):
             np.stack(world_to_camera_matrices),
             np.stack(camera_to_world_matrices)
         )
-        depth_bound_matrices = np.stack(depth_bound_matrices)
+        depth_bounds = np.stack(depth_bounds)
         intrinsic_param_matrices = np.stack(intrinsic_param_matrices)
         affine_map_matrices, affine_map_inverse_matrices = (
             np.stack(affine_map_matrices),
             np.stack(affine_map_inverse_matrices)
         )
 
-        # final row is identity
-        # TODO check why / why remove
+        # final row is identity; reduce matrices to 3×4
         image_warp_matrices = np.stack(image_warp_matrices)[:, :3]
 
         # TODO: why np not torch here?
         # also check if dtype conversions can be done on load
         return {
             'scan_id': mvs_config.scan_id,
-            'viewpoint_ids': [reference_view] + source_views,
+            'viewpoint_ids': [reference_view] + source_views + [target_view],
             'lighting_id': lighting_condition_id,
             'mvs_images': mvs_images,
             #'depth_maps': depth_maps.astype(np.float32),
             'world_to_camera_matrices': world_to_camera_matrices.astype(np.float32),
             'camera_to_world_matrices': camera_to_world_matrices.astype(np.float32),
-            'depth_bounds': depth_bound_matrices.astype(np.float32),
+            'depth_bounds': depth_bounds.astype(np.float32),
             'image_warp_matrices': image_warp_matrices.astype(np.float32),
             'intrinsic_param_matrices': intrinsic_param_matrices.astype(np.float32),
             'affine_map_matrices': affine_map_matrices,

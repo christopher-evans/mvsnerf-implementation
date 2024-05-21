@@ -1,4 +1,6 @@
-import numpy as np
+import cv2
+import numpy
+
 
 from PIL import Image
 from torchvision import transforms
@@ -17,8 +19,14 @@ transforms = transforms.Compose(
 
 
 def load_mvs_image_file(file_name, down_sample):
+    # image = cv2.imread(file_name, flags=cv2.IMREAD_COLOR)
+    # height, width, _ = image.shape
+    # down_sampled_height = round(height * down_sample)
+    # down_sampled_width = round(width * down_sample)
+    # image = cv2.resize(image, (down_sampled_width, down_sampled_height), interpolation=cv2.INTER_LINEAR)
+
     image = Image.open(file_name)
-    down_sample_resolution = np.round(np.array(image.size) * down_sample).astype('int')
+    down_sample_resolution = numpy.round(numpy.array(image.size) * down_sample).astype('int')
     image = image.resize(down_sample_resolution, resample=Image.Resampling.BILINEAR)
     return transforms(image)
 

@@ -2,7 +2,6 @@
 TODO: file docstring
 """
 import torch
-import gc
 
 from kornia.utils import create_meshgrid
 import torch.nn.functional as functional
@@ -193,7 +192,7 @@ def interpolate_at_grid(source_features, source_grid) :
 
 
 def build_volume_features(
-    image_features,
+    source_features,
     source_images,
     image_warp_matrices,
     depth_bounds,
@@ -202,9 +201,8 @@ def build_volume_features(
 ):
     # TODO pydocs for dimensions
     # fetch dimensions from input data
-    batch_size, viewpoints, feature_channels, height, width = image_features.shape
+    batch_size, source_viewpoints, feature_channels, height, width = source_features.shape
     _, _, image_channels, _, _ = source_images.shape
-    source_viewpoints = viewpoints - 1
     padded_height, padded_width = height + 2 * padding, width + 2 * padding
 
     # features are down sampled by 4 in each direction, interpolate the images on the new grid
@@ -217,41 +215,50 @@ def build_volume_features(
     ) \
         .view(batch_size, source_viewpoints, image_channels, height, width)
 
-    # we want to iterate over source images, so split up inputs and
-    # reference_feature.shape: (batch_size, feature_channels, height, width)
-    # source_features.shape: (batch_size, source_viewpoints, feature_channels, height, width)
-    source_features = image_features[:, 1:]
-    reference_feature = functional.pad(image_features[:, 0], (padding, padding, padding, padding), "constant", 0)
+    reference_view_index = 0
+    reference_features, remaining_features = source_features[:, reference_view_index], source_features[:, reference_view_index + 1:]
+    reference_images, remaining_images = source_images[:, reference_view_index], source_images[:, reference_view_index + 1:]
 
     # initialize volume features:
-    #  0-31  : cost volume for source features
-    #  32-40 : down sampled source image data
+    #  0-8  : down sampled source image data
+    #  9-40 : cost volume for source features
     # volume_features.shape (batch_size, feature_channels + source_viewpoints * image_channels, depth_resolution, height, width)
     volume_feature_channels = feature_channels + source_viewpoints * image_channels
-    volume_features = torch.empty(
+    volume_features = torch.zeros(
         (batch_size, volume_feature_channels, depth_resolution, padded_height, padded_width),
-        device=image_features.device,
-        dtype=image_features.dtype
+        device=source_features.device,
+        dtype=source_features.dtype
     )
+    volume_features[:, :3, :, padding:height + padding, padding:width + padding] = \
+        reference_images.unsqueeze(2) \
+            .expand(-1, -1, depth_resolution, -1, -1)
+
+    # pad features
+    if padding > 0:
+        reference_features = functional.pad(
+            reference_features,
+            (padding, padding, padding, padding),
+            'constant',
+            0
+        )
+
+    # expand features across depth_resolution to initialize volume running totals
+    reference_features = reference_features.unsqueeze(2) \
+        .repeat(1, 1, depth_resolution, 1, 1)
 
     # running total of variance cost metric
-    # reference_volume.shape: (batch_size, channels, depth_resolution, height, width)
-    reference_volume = reference_feature.unsqueeze(2) \
-        .repeat(1, 1, depth_resolution, 1, 1)
-    volume_sum = reference_volume
-    volume_square_sum = reference_volume ** 2
+    volume_sum = reference_features
+    volume_square_sum = reference_features ** 2
 
-    # TODO get rid of this
-    del reference_volume, reference_feature
 
     # count of source images containing each voxel
     # used to compute variance metric
     grid_masks = torch.ones(
-        (batch_size, depth_resolution, padded_height, padded_width),
+        (batch_size, source_viewpoints, depth_resolution, padded_height, padded_width),
         device=volume_sum.device
     )
 
-    for viewpoint_index in range(source_viewpoints):
+    for viewpoint_index in range(reference_view_index + 1, source_viewpoints):
         source_image = source_images[:, viewpoint_index]
         source_feature = source_features[:, viewpoint_index]
         image_warp_matrix = image_warp_matrices[:, viewpoint_index]
@@ -266,7 +273,8 @@ def build_volume_features(
         )
 
         # add image data to volume features
-        volume_features[:, feature_channels + viewpoint_index * 3 : feature_channels + (viewpoint_index + 1) * 3] = interpolate_at_grid(source_image, source_grid)
+        volume_features[:, viewpoint_index * 3:(viewpoint_index + 1) * 3] = interpolate_at_grid(source_image, source_grid)
+
 
         # add image features to running sum for volume cost metric
         source_volume = interpolate_at_grid(source_feature, source_grid)
@@ -274,17 +282,20 @@ def build_volume_features(
         volume_square_sum = volume_square_sum + source_volume ** 2
 
         # update grid masks
-        source_grid = source_grid.view(batch_size, depth_resolution, padded_height, padded_width, 2)
-        grid_masks += ((source_grid > -1.0) * (source_grid < 1.0)) \
-            .prod(dim=-1) \
-            .type(volume_sum.dtype)
+        source_grid = source_grid.view(batch_size, 1, depth_resolution, padded_height, padded_width, 2)
+        grid_mask = ((source_grid > -1.0) * (source_grid < 1.0))
+        grid_mask = (grid_mask[..., 0] * grid_mask[..., 1])
+        grid_masks[:, viewpoint_index] = grid_mask.float()
+        # grid_masks += ((source_grid > -1.0) * (source_grid < 1.0)) \
+        #     .prod(dim=-1) \
+        #     .type(volume_sum.dtype)
 
         # TODO get rid of this
-        del source_volume, source_feature, image_warp_matrix, source_grid
+        del source_volume, source_feature, image_warp_matrix, grid_mask
 
     # add variance metric to volume features
-    count = (1.0 / grid_masks).unsqueeze(dim=1)
-    volume_features[:, :32] = volume_square_sum * count - (volume_sum * count) ** 2
+    count = 1.0 / torch.sum(grid_masks, dim=1, keepdim=True)
+    volume_features[:, -32:] = volume_square_sum * count - (volume_sum * count) ** 2
 
     return volume_features
 
@@ -342,8 +353,8 @@ def build_volume_features(
 #     return warped_src_feat, src_grid
 #
 # batch_size = 2
-# height = 3
-# width = 3
+# height = 32
+# width = 42
 # channels = 3
 # padding = 1
 # depth_resolution = 3
@@ -359,11 +370,11 @@ def build_volume_features(
 # my_f = interpolate_at_grid(source_features, my_g)
 #
 # t_vals = torch.linspace(0., 1., steps=depth_resolution, dtype=torch.float32)  # (B, D)
-# near, far = depth_bounds[1]  # assume batch size==1
+# near, far = depth_bounds[0]  # assume batch size==1
 # dv = near * (1. - t_vals) + far * t_vals
 # dv = dv.unsqueeze(0)
 #
-# n_f, n_g = homo_warp(source_features[1:], image_warp_matrices[1:], dv, pad=padding)
+# n_f, n_g = homo_warp(source_features[:1], image_warp_matrices[:1], dv, pad=padding)
 #
-# print('feat ', my_f[1:], n_f, torch.allclose(my_f[1:], n_f))
-# print('grid ', my_g[1:], n_g, torch.allclose(my_g[1:], n_g))
+# print('feat ', torch.allclose(my_f[:1], n_f))
+# print('grid ', torch.allclose(my_g[:1], n_g))

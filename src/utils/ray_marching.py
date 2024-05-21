@@ -20,6 +20,7 @@ def ray_offsets_sampled(
     :param int batch_size: Batch size
     :param torch.dtype dtype: Data type for return tensor
     :param torch.device device: Device for return tensor
+    :param torch.Generator generator: Random number generator for testing
 
     :return tensor[batch_size, ray_count]: Sampled pixel offsets
     """
@@ -73,6 +74,7 @@ def create_ray_offsets_deterministic(*args, **kwargs):
 
 def ray_offsets_row(
     width,
+    height,
     row_index,
     row_batch_size,
     batch_size=1,
@@ -93,7 +95,7 @@ def ray_offsets_row(
     :return tensor[batch_size, row_batch_size * width]: Pixel offsets for each (x, y) in each image in batch
     """
     y_offsets, x_offsets = torch.meshgrid(
-        torch.linspace(row_index, row_index + (row_batch_size - 1), row_batch_size, dtype=dtype, device=device),
+        torch.linspace(row_index, row_index + 1, row_batch_size, dtype=dtype, device=device),
         torch.linspace(0, width - 1, width, dtype=dtype, device=device),
         indexing='ij'
     )
@@ -103,6 +105,19 @@ def ray_offsets_row(
     y_offsets = y_offsets.reshape(width * row_batch_size) \
         .unsqueeze(0) \
         .repeat((batch_size, 1))
+
+    # print(x_offsets.shape)
+    # print(y_offsets.shape)
+    #
+    # ys, xs = ys[idx * chunk:(idx + 1) * chunk], xs[idx * chunk:(idx + 1) * chunk]
+    # y_offsets, x_offsets = torch.meshgrid(torch.linspace(0, height - 1, height, dtype=dtype, device=device), torch.linspace(0, width - 1, width, dtype=dtype, device=device))
+    # y_offsets, x_offsets = y_offsets.reshape(-1), x_offsets.reshape(-1)
+    # y_offsets = y_offsets[row_index:row_index + 1]
+    # x_offsets = x_offsets[row_index:row_index + 1]
+    # y_offsets, x_offsets = y_offsets.unsqueeze(0).repeat((batch_size, 1)), x_offsets.unsqueeze(0).repeat((batch_size, 1))
+    #
+    # print(y_offsets.shape)
+    # print(x_offsets.shape)
 
     return x_offsets, y_offsets
 
@@ -219,9 +234,9 @@ def generate_depth_samples(depth_bounds, ray_count, ray_sample_count, generator=
 
 def get_nd_coordinates(
     point_samples,
-    world_to_camera_reference,
-    intrinsic_reference,
-    depth_bounds_reference,
+    world_to_camera_target,
+    intrinsic_target,
+    depth_bounds_target,
     image_size,
     padding,
 ):
@@ -232,14 +247,14 @@ def get_nd_coordinates(
     :param point_samples: 3D co-ordinates of samples for rays
     :type point_samples: tensor[batch_size, ray_count, ray_sample_count, 3]
 
-    :param world_to_camera_reference: World to camera matrix for reference view
-    :type world_to_camera_reference: tensor[batch_size, 3, 4]
+    :param world_to_camera_target: World to camera matrix for target view
+    :type world_to_camera_target: tensor[batch_size, 3, 4]
 
-    :param intrinsic_reference: Intrinsic parameters for reference view
-    :type intrinsic_reference: tensor[batch_size, 3, 3]
+    :param intrinsic_target: Intrinsic parameters for target view
+    :type intrinsic_target: tensor[batch_size, 3, 3]
 
-    :param depth_bounds_reference: Depth bounds for reference view
-    :type depth_bounds_reference: tensor[batch_size, 2]
+    :param depth_bounds_target: Depth bounds for target view
+    :type depth_bounds_target: tensor[batch_size, 2]
 
     :param image_size: Image dimensions minus one, [width - 1, height - 1]
     :type image_size: tensor[2]
@@ -252,24 +267,24 @@ def get_nd_coordinates(
     """
     # point_samples.shape (batch_size, ray_count, ray_sample_count, 3)
     batch_size, ray_count, ray_sample_count, _ = point_samples.shape
-    depth_min_reference, depth_max_reference = \
-        depth_bounds_reference[:, 0].view(batch_size, 1), \
-        depth_bounds_reference[:, 1].view(batch_size, 1)
+    depth_min_target, depth_max_target = \
+        depth_bounds_target[:, 0].view(batch_size, 1), \
+            depth_bounds_target[:, 1].view(batch_size, 1)
 
     # reshape to be a list of points
     point_samples = point_samples.view(batch_size, -1, 3)
 
-    # map from world to reference view
-    reference_rotation = world_to_camera_reference[:, :3, :3]
-    reference_translation = world_to_camera_reference[:, :3, 3:]
-    point_samples = torch.matmul(point_samples, reference_rotation.transpose(dim0=1, dim1=2)) + reference_translation.reshape(batch_size, 1, 3)
+    # map from world to target view
+    target_rotation = world_to_camera_target[:, :3, :3]
+    target_translation = world_to_camera_target[:, :3, 3:]
+    point_samples = torch.matmul(point_samples, target_rotation.transpose(dim0=1, dim1=2)) + target_translation.reshape(batch_size, 1, 3)
 
     # map to pixel co-ordinates,
-    point_samples_pixel = point_samples @ intrinsic_reference.transpose(dim0=1, dim1=2)
+    point_samples_pixel = point_samples @ intrinsic_target.transpose(dim0=1, dim1=2)
 
     # TODO: what if z values are less than 1 here?
     point_samples_pixel[..., :2] = point_samples_pixel[..., :2] / point_samples_pixel[..., -1:] / image_size.view(1, 1, 2)
-    point_samples_pixel[..., 2] = (point_samples_pixel[..., 2] - depth_min_reference) / (depth_max_reference - depth_min_reference)
+    point_samples_pixel[..., 2] = (point_samples_pixel[..., 2] - depth_min_target) / (depth_max_target - depth_min_target)
 
     if padding > 0:
         # TODO: change hard coded downscaling factor from feature net
@@ -296,14 +311,14 @@ def march_rays(
     batch_size, viewpoints, channels, height, width = mvs_images.shape
     dtype, device = mvs_images.dtype, mvs_images.device
 
-    # get reference data
-    reference_viewpoint_index = 0
-    world_to_camera_reference = world_to_cameras[:, reference_viewpoint_index]
-    intrinsic_reference = intrinsic_params[:, reference_viewpoint_index]
-    depth_bounds_reference = depth_bounds[:, reference_viewpoint_index]
-    mvs_image_reference = mvs_images[:, reference_viewpoint_index]
+    # get target camera data
+    target_viewpoint_index = viewpoints - 1
+    world_to_camera_target = world_to_cameras[:, target_viewpoint_index]
+    intrinsic_target = intrinsic_params[:, target_viewpoint_index]
+    depth_bounds_target = depth_bounds[:, target_viewpoint_index]
+    mvs_image_target = mvs_images[:, target_viewpoint_index]
 
-    # allocate for just the reference viewpoint
+    # allocate for just the target viewpoint
     # may wish to use sources in future
     all_ray_directions = torch.empty((batch_size, 1, ray_count, 3), dtype=dtype, device=device)
     all_ray_origins = torch.empty((batch_size, 1, ray_count, 3), dtype=dtype, device=device)
@@ -311,7 +326,7 @@ def march_rays(
     all_point_samples = torch.empty((batch_size, 1, ray_count, ray_sample_count, 3), dtype=dtype, device=device)
     all_point_samples_ndc = torch.empty((batch_size, 1, ray_count, ray_sample_count, 3), dtype=dtype, device=device)
     all_image_colours = torch.empty((batch_size, 1, ray_count, 3), dtype=dtype, device=device)
-    for viewpoint in range(0, 1):
+    for viewpoint in range(target_viewpoint_index, target_viewpoint_index + 1):
         intrinsics = intrinsic_params[:, viewpoint]
         camera_to_world = cameras_to_world[:, viewpoint]
 
@@ -323,16 +338,16 @@ def march_rays(
         # pixel_coordinates.shape: (batch_size, 2, ray_count)
         rays_origin, ray_directions, pixel_coordinates = create_rays(ray_offset_function, intrinsics, camera_to_world)
 
-        # fetch colours of reference image at these pixel offsets
+        # fetch colours of target image at these pixel offsets
         # TODO pixel coordinates aren't used elsewhere, can return a different shape to save this op
         # TODO what about when sampling everything, can be cheap?
         pixel_coordinates_int = pixel_coordinates.long()
         for batch in range(batch_size):
             x_coordinates = pixel_coordinates_int[batch, 0]
             y_coordinates = pixel_coordinates_int[batch, 1]
-            reference_image_colours = mvs_image_reference[batch, :, x_coordinates, y_coordinates]
+            target_image_colours = mvs_image_target[batch, :, x_coordinates, y_coordinates]
 
-            all_image_colours[batch, 0, :, :] = reference_image_colours.t()
+            all_image_colours[batch, 0, :, :] = target_image_colours.t()
 
         # add ray origins to tensor
         rays_origin = rays_origin.unsqueeze(dim=1)
@@ -341,7 +356,7 @@ def march_rays(
         rays_origin = rays_origin.expand(-1, ray_count, -1)
 
         # add ray directions to tensor
-        all_ray_directions[:, viewpoint] = ray_directions
+        all_ray_directions[:, 0] = ray_directions
 
         # generate depth samples
         # depth_samples.shape: (batch_size, ray_count, ray_sample_count)
@@ -356,17 +371,17 @@ def march_rays(
         image_size = torch.tensor([width - 1, height - 1], device=mvs_images.device, dtype=mvs_images.dtype)
         points_ndc = get_nd_coordinates(
             point_samples,
-            world_to_camera_reference,
-            intrinsic_reference,
-            depth_bounds_reference,
+            world_to_camera_target,
+            intrinsic_target,
+            depth_bounds_target,
             image_size,
             padding
         )
 
-        all_ray_origins[:, viewpoint] = rays_origin
-        all_depth_samples[:, viewpoint] = depth_samples
-        all_point_samples[:, viewpoint] = point_samples
-        all_point_samples_ndc[:, viewpoint] = points_ndc
+        all_ray_origins[:, 0] = rays_origin
+        all_depth_samples[:, 0] = depth_samples
+        all_point_samples[:, 0] = point_samples
+        all_point_samples_ndc[:, 0] = points_ndc
 
     return all_ray_directions, \
         all_ray_origins, \

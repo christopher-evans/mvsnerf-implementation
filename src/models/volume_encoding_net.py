@@ -1,5 +1,14 @@
 import torch.nn as nn
 from inplace_abn import InPlaceABN as BatchNormActivation
+import logging
+
+
+def weights_init(module):
+    if isinstance(module, nn.Conv3d):
+        nn.init.kaiming_normal_(module.weight)
+
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
 
 
 class VolumeEncodingNet(nn.Module):
@@ -43,12 +52,21 @@ class VolumeEncodingNet(nn.Module):
             BatchNormActivation(8),
         )
 
+    def init_weights(self):
+        self.apply(weights_init)
+
     def forward(self, x):
+        _, _, _, height, width = x.shape
+        if height % 8 != 0 or width % 8 != 0:
+            logging.getLogger(__name__) \
+                .warning(f'Caution: width is {width} and height is {height}: should be divisible by 8')
+
         first_layer = self.first_convolution(x)
         first_down_sample = self.first_down_sample(first_layer)
         second_down_sample = self.second_down_sample(first_down_sample)
 
         x = self.third_down_sample(second_down_sample)
+
         x = second_down_sample + self.first_up_sample(x)
         del second_down_sample
 

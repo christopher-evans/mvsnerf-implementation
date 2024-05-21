@@ -55,7 +55,8 @@ def train(args):
         logger=logger,
         enable_checkpointing=True,
         benchmark=True,
-        precision=16
+        #precision="32-true"
+        precision="16-mixed"
     )
     trainer.fit(mvs_nerf, datamodule=dtu_datamodule)
 

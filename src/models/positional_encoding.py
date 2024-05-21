@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import kornia.nerf.positional_encoder
 
 
 class PositionalEncoding(nn.Module):

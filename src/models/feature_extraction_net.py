@@ -2,6 +2,14 @@ import torch.nn as nn
 from inplace_abn import InPlaceABN as BatchNormActivation
 
 
+def weights_init(module):
+    if isinstance(module, nn.Conv2d):
+        nn.init.kaiming_normal_(module.weight)
+
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+
+
 class FeatureExtractionNet(nn.Module):
     def __init__(self, in_channels=3):
         super(FeatureExtractionNet, self).__init__()
@@ -32,6 +40,9 @@ class FeatureExtractionNet(nn.Module):
             # top layer
             nn.Conv2d(32, 32, 1)
         )
+
+    def init_weights(self):
+        self.apply(weights_init)
 
     def forward(self, x):
         batch_size, viewpoints, channels, height, width = x.shape

@@ -22,7 +22,7 @@ class MvsConfiguration:
     """Configuration for an MVS problem."""
     scan_id: str
     lighting_condition_id: int
-    reference_view: int
+    target_view: int
     source_views: list
 
 
@@ -63,7 +63,7 @@ class DTUDataModule(LightningDataModule):
 
         :param stage: 'fit', 'validate', 'test', or 'predict'
         """
-        source_view_sampler = SourceViews.rand_k_top_n()
+        source_view_sampler = SourceViews.top_k()
         if stage != 'fit':
             source_view_sampler = SourceViews.top_k()
         image_pairings, all_viewpoint_ids = load_image_pairings(
@@ -91,14 +91,14 @@ class DTUDataModule(LightningDataModule):
         scan_ids = load_scans(self.config_dir, stage)
 
         for scan_id in scan_ids:
-            for reference_view in image_pairings:
-                source_views = image_pairings[reference_view]
+            for target_view in image_pairings:
+                source_views = image_pairings[target_view]
 
                 for lighting_condition_id in lighting_conditions:
                     self.mvs_configurations += [MvsConfiguration(
                         scan_id=scan_id,
                         lighting_condition_id=lighting_condition_id,
-                        reference_view=reference_view,
+                        target_view=target_view,
                         source_views=source_views
                     )]
 
