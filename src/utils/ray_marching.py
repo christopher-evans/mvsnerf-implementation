@@ -95,7 +95,7 @@ def ray_offsets_row(
     :return tensor[batch_size, row_batch_size * width]: Pixel offsets for each (x, y) in each image in batch
     """
     y_offsets, x_offsets = torch.meshgrid(
-        torch.linspace(row_index, row_index + 1, row_batch_size, dtype=dtype, device=device),
+        torch.linspace(row_index, row_index + (row_batch_size - 1), row_batch_size, dtype=dtype, device=device),
         torch.linspace(0, width - 1, width, dtype=dtype, device=device),
         indexing='ij'
     )
@@ -105,19 +105,6 @@ def ray_offsets_row(
     y_offsets = y_offsets.reshape(width * row_batch_size) \
         .unsqueeze(0) \
         .repeat((batch_size, 1))
-
-    # print(x_offsets.shape)
-    # print(y_offsets.shape)
-    #
-    # ys, xs = ys[idx * chunk:(idx + 1) * chunk], xs[idx * chunk:(idx + 1) * chunk]
-    # y_offsets, x_offsets = torch.meshgrid(torch.linspace(0, height - 1, height, dtype=dtype, device=device), torch.linspace(0, width - 1, width, dtype=dtype, device=device))
-    # y_offsets, x_offsets = y_offsets.reshape(-1), x_offsets.reshape(-1)
-    # y_offsets = y_offsets[row_index:row_index + 1]
-    # x_offsets = x_offsets[row_index:row_index + 1]
-    # y_offsets, x_offsets = y_offsets.unsqueeze(0).repeat((batch_size, 1)), x_offsets.unsqueeze(0).repeat((batch_size, 1))
-    #
-    # print(y_offsets.shape)
-    # print(x_offsets.shape)
 
     return x_offsets, y_offsets
 

@@ -200,7 +200,7 @@ class MVSNeRF(pl.LightningModule):
                 device=mvs_images.device,
             )
 
-            batch_row_count = 1
+            batch_row_count = 2
             for image_row in range(0, height, batch_row_count):
                 ray_count, ray_sample_count = width * batch_row_count, self.hparams.ray_march_sample_count
                 ray_offset_function = create_ray_offsets_row(
@@ -250,11 +250,11 @@ class MVSNeRF(pl.LightningModule):
                 )
 
                 # prediction_rgb.shape: (batch_size, ray_count, channels)
-                all_predictions_rgb[0, image_row] = parse_nerf(
+                all_predictions_rgb[:, image_row:image_row + batch_row_count] = parse_nerf(
                     prediction_colours.view(batch_size, ray_count, ray_sample_count, 3),
                     prediction_density.view(batch_size, ray_count, ray_sample_count)
                 ) \
-                    .view(batch_row_count, width, channels)
+                    .view(batch_size, batch_row_count, width, channels)
 
             mvs_images_target = mvs_images[:, -1]
             image_prediction = all_predictions_rgb.permute(0, 3, 1, 2)

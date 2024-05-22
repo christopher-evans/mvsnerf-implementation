@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from kornia.nerf.positional_encoder import PositionalEncoder
 
-
+# TODO move this somewhere
 torch.autograd.set_detect_anomaly(True)
 
 def weights_init(m):
@@ -14,7 +14,7 @@ def weights_init(m):
 
 
 class Renderer_ours(nn.Module):
-    def __init__(self, network_depth=7, hidden_layer_neurons=256, input_ch=3, input_ch_views=3, input_ch_feat=8 + 3 * 3, skips=[4]):
+    def __init__(self, network_depth=6, hidden_layer_neurons=128, input_ch=3, input_ch_views=3, input_ch_feat=8 + 4 * 3, skips=[4]):
         """
         """
         super(Renderer_ours, self).__init__()

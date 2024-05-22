@@ -45,13 +45,12 @@ def parse_file(file_name, depth_scale_factor, image_down_sample):
     # intrinsics parameters: lines 7-9 define a 3×3 matrix
     intrinsic_params_flat = np.fromstring(' '.join(lines[7:10]), dtype=np.float32, sep=' ')
     intrinsic_params = intrinsic_params_flat.reshape((3, 3))
-    # TODO: why scaling by 4 here?
     # see comment: https://github.com/jzhangbs/Vis-MVSNet/issues/15
     # appears to be difference between depth maps and image resolution
     # Note also intrinsics should probably have 0.0 / 4.0 and 44.0 / 4.0 added
     # see https://github.com/idiap/GeoNeRF/blob/main/data/dtu.py#L161C9-L162C57
-    intrinsic_params[0, 2] = intrinsic_params[0, 2] + 80.0 / 4.0
-    intrinsic_params[1, 2] = intrinsic_params[1, 2] + 44.0 / 4.0
+    intrinsic_params[0, 2] = intrinsic_params[0, 2]# + 80.0 / 4.0
+    intrinsic_params[1, 2] = intrinsic_params[1, 2]# + 44.0 / 4.0
     intrinsic_params[:2] = intrinsic_params[:2] * image_down_sample * 4
 
     # depth_min & depth_interval: line 11

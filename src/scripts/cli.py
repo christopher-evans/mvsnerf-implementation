@@ -12,6 +12,13 @@ COMMAND_MAP = {
 
 def create_train_parser(actions):
     train = actions.add_parser('train', help='Train MVSNeRF network')
+    train.add_argument(
+        '--experiment_name',
+        type=str,
+        default='mvsnerf',
+        help='Name to display in tensorboard for experiment'
+    )
+
     train_dataset = train.add_argument_group('dataset')
     train_dataset.add_argument(
         '--dataset',

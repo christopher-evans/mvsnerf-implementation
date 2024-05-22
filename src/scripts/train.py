@@ -45,7 +45,7 @@ def train(args):
     lr_monitor = LearningRateMonitor()
     progress_bar = RichProgressBar()
 
-    logger = TensorBoardLogger(".experiments", name="mvsnerf")
+    logger = TensorBoardLogger(".experiments", name=args.experiment_name)
     trainer = pl.Trainer(
         limit_train_batches=args.limit_train_batches,
         max_epochs=args.epoch_count,

@@ -22,7 +22,7 @@ pip install -r requirements. txt
 
 # tensorboard
 
-tensorboard --logdir ./lightning_logs
+tensorboard --logdir ./.experiments
 
 
 PyTest : https://stackoverflow.com/questions/19672138/how-do-i-mock-the-filesystem-in-python-unit-tests

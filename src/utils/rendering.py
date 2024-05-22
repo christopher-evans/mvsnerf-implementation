@@ -52,6 +52,7 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
     _, ray_count, ray_sample_count, _ = all_point_samples.shape
     device, dtype = mvs_images.device, mvs_images.dtype
     image_scale = torch.tensor([width - 1, height - 1], device=device, dtype=dtype)
+    channels += 1
     colours = torch.empty((batch_size, channels * source_viewpoints, ray_count, ray_sample_count), device=device, dtype=dtype)
 
     for source_index in range(source_viewpoints):
@@ -69,13 +70,20 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
         # mvs_images[:, source_index].shape: (batch_size, channels, width, height)
         # point_samples_pixel.shape: (batch_size, ray_count, ray_sample_count, 2)
         # colours[:].shape: (batch_size, channels, ray_count, ray_sample_count)
-        colours[:, source_index * channels:(source_index + 1) * channels, :, :] = functional.grid_sample(
+
+        in_mask = ((point_samples_pixel >-1.0)*(point_samples_pixel < 1.0))
+        in_mask = (in_mask[...,0]*in_mask[...,1]).float()
+        #colours[:, (source_index + 1) * channels, :, :] = in_mask.unsqueeze(1)
+        #print('nz',torch.count_nonzero(in_mask), in_mask.shape, torch.prod(torch.tensor(list(in_mask.shape))))
+
+        colours[:, source_index * channels:(source_index + 1) * channels, :, :] = torch.cat([functional.grid_sample(
             mvs_images[:, source_index],
             point_samples_pixel,
             align_corners=True,
             mode='bilinear',
             padding_mode='border'
-        )
+        ), in_mask.unsqueeze(1)], dim=1)
+
 
     return colours.permute(0, 2, 3, 1) \
         .contiguous() \

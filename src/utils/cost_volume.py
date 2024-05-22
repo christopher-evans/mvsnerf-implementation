@@ -285,7 +285,7 @@ def build_volume_features(
         source_grid = source_grid.view(batch_size, 1, depth_resolution, padded_height, padded_width, 2)
         grid_mask = ((source_grid > -1.0) * (source_grid < 1.0))
         grid_mask = (grid_mask[..., 0] * grid_mask[..., 1])
-        grid_masks[:, viewpoint_index] = grid_mask.float()
+        grid_masks[:, viewpoint_index:viewpoint_index + 1] = grid_mask.float()
         # grid_masks += ((source_grid > -1.0) * (source_grid < 1.0)) \
         #     .prod(dim=-1) \
         #     .type(volume_sum.dtype)
