@@ -40,8 +40,8 @@ class MVSNeRF(pl.LightningModule):
         self.self_attention_renderer = Renderer_ours()
 
         # initialize weights
-        self.feature_extraction.init_weights()
-        self.volume_encoding.init_weights()
+        #self.feature_extraction.init_weights()
+        #self.volume_encoding.init_weights()
         self.self_attention_renderer.init_weights()
 
         self.save_hyperparameters()
@@ -55,8 +55,8 @@ class MVSNeRF(pl.LightningModule):
         epoch_count = self.hparams.epoch_count
 
         # TODO: what about betas
-        optimizer = optim.Adam(self.parameters(), lr=initial_learning_rate, betas=(0.9, 0.999), weight_decay=1e-5)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count-1, eta_min=minimum_learning_rate)
+        optimizer = optim.Adam(self.parameters(), lr=initial_learning_rate, betas=(0.9, 0.999))
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_count, eta_min=minimum_learning_rate)
         return [optimizer], [scheduler]
 
     def un_preprocess(self, mvs_images, shape=(1, 1, 3, 1, 1)):
@@ -120,7 +120,7 @@ class MVSNeRF(pl.LightningModule):
 
         volume_directions = create_direction_vectors(
             all_ray_directions[:, 0],
-            batch['world_to_camera_matrices'][:, -1],
+            batch['world_to_camera_matrices'][:, 0],
             ray_sample_count
         )
 
@@ -200,7 +200,7 @@ class MVSNeRF(pl.LightningModule):
                 device=mvs_images.device,
             )
 
-            batch_row_count = 2
+            batch_row_count = 1
             for image_row in range(0, height, batch_row_count):
                 ray_count, ray_sample_count = width * batch_row_count, self.hparams.ray_march_sample_count
                 ray_offset_function = create_ray_offsets_row(
@@ -221,12 +221,13 @@ class MVSNeRF(pl.LightningModule):
                     ray_count,
                     ray_sample_count,
                     batch['depth_bounds'],
-                    padding=self.hparams.image_feature_padding
+                    padding=self.hparams.image_feature_padding,
+                    valid=True
                 )
 
                 volume_directions = create_direction_vectors(
                     all_ray_directions[:, 0],
-                    batch['world_to_camera_matrices'][:, -1],
+                    batch['world_to_camera_matrices'][:, 0],
                     ray_sample_count
                 )
                 # volume_features.shape: (batch_size, ray_count, ray_sample_count, 8)

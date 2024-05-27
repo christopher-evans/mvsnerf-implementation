@@ -87,7 +87,7 @@ def create_train_parser(actions):
     train_rendering.add_argument(
         '--image_feature_padding',
         type=int,
-        default=12,
+        default=24,
         help='Padding for image features when evaluating the warped features to produce a cost volume'
     )
     train_rendering.add_argument(

@@ -196,8 +196,8 @@ def build_volume_features(
     source_images,
     image_warp_matrices,
     depth_bounds,
-    padding=12,
-    depth_resolution=128
+    padding,
+    depth_resolution
 ):
     # TODO pydocs for dimensions
     # fetch dimensions from input data
@@ -216,8 +216,8 @@ def build_volume_features(
         .view(batch_size, source_viewpoints, image_channels, height, width)
 
     reference_view_index = 0
-    reference_features, remaining_features = source_features[:, reference_view_index], source_features[:, reference_view_index + 1:]
-    reference_images, remaining_images = source_images[:, reference_view_index], source_images[:, reference_view_index + 1:]
+    reference_feature, remaining_features = source_features[:, reference_view_index], source_features[:, reference_view_index + 1:]
+    reference_image, remaining_images = source_images[:, reference_view_index], source_images[:, reference_view_index + 1:]
 
     # initialize volume features:
     #  0-8  : down sampled source image data
@@ -230,25 +230,25 @@ def build_volume_features(
         dtype=source_features.dtype
     )
     volume_features[:, :3, :, padding:height + padding, padding:width + padding] = \
-        reference_images.unsqueeze(2) \
+        reference_image.unsqueeze(2) \
             .expand(-1, -1, depth_resolution, -1, -1)
 
     # pad features
     if padding > 0:
-        reference_features = functional.pad(
-            reference_features,
+        reference_feature = functional.pad(
+            reference_feature,
             (padding, padding, padding, padding),
             'constant',
             0
         )
 
     # expand features across depth_resolution to initialize volume running totals
-    reference_features = reference_features.unsqueeze(2) \
+    reference_feature = reference_feature.unsqueeze(2) \
         .repeat(1, 1, depth_resolution, 1, 1)
 
     # running total of variance cost metric
-    volume_sum = reference_features
-    volume_square_sum = reference_features ** 2
+    volume_sum = reference_feature
+    volume_square_sum = reference_feature ** 2
 
 
     # count of source images containing each voxel
@@ -352,12 +352,69 @@ def build_volume_features(
 #     # src_grid = src_grid.view(B, 1, D, H_pad, W_pad, 2)
 #     return warped_src_feat, src_grid
 #
+#
+# def build_volume_costvar_img(imgs, feats, proj_mats, depth_values, pad=0):
+#     # feats: (B, V, C, H, W)
+#     # proj_mats: (B, V, 3, 4)
+#     # depth_values: (B, D, H, W)
+#     # cost_reg: nn.Module of input (B, C, D, h, w) and output (B, 1, D, h, w)
+#     # volume_sum [B, G, D, h, w]
+#     # prob_volume [B D H W]
+#     # volume_feature [B C D H W]
+#
+#     B, V, C, H, W = feats.shape
+#     D = depth_values.shape[1]
+#     ref_feats, src_feats = feats[:, 0], feats[:, 1:]
+#     src_feats = src_feats.permute(1, 0, 2, 3, 4)  # (V-1, B, C, h, w)
+#     proj_mats = proj_mats[:, 1:]
+#     proj_mats = proj_mats.permute(1, 0, 2, 3)  # (V-1, B, 3, 4)
+#
+#     if pad > 0:
+#         ref_feats = functional.pad(ref_feats, (pad, pad, pad, pad), "constant", 0)
+#
+#     img_feat = torch.empty((B, 9 + 32, D, *ref_feats.shape[-2:]), device=feats.device, dtype=torch.float)
+#     imgs = functional.interpolate(imgs.view(B * V, *imgs.shape[2:]), (H, W), mode='bilinear', align_corners=False).view(B, V, -1,
+#                                                                                                                H,
+#                                                                                                                W).permute(
+#         1, 0, 2, 3, 4)
+#     img_feat[:, :3, :, pad:H + pad, pad:W + pad] = imgs[0].unsqueeze(2).expand(-1, -1, D, -1, -1)
+#
+#     ref_volume = ref_feats.unsqueeze(2).repeat(1, 1, D, 1, 1)  # (B, C, D, h, w)
+#
+#     volume_sum = ref_volume
+#     volume_sq_sum = ref_volume ** 2
+#
+#     del ref_feats
+#
+#     in_masks = torch.ones((B, V, D, H + pad * 2, W + pad * 2), device=volume_sum.device)
+#     for i, (src_img, src_feat, proj_mat) in enumerate(zip(imgs[1:], src_feats, proj_mats)):
+#         warped_volume, grid = homo_warp(src_feat, proj_mat, depth_values, pad=pad)
+#         img_feat[:, (i + 1) * 3:(i + 2) * 3], _ = homo_warp(src_img, proj_mat, depth_values, src_grid=grid, pad=pad)
+#
+#         grid = grid.view(B, 1, D, H + pad * 2, W + pad * 2, 2)
+#         in_mask = ((grid > -1.0) * (grid < 1.0))
+#         in_mask = (in_mask[..., 0] * in_mask[..., 1])
+#         in_masks[:, i + 1] = in_mask.float()
+#
+#         volume_sum = volume_sum + warped_volume
+#         volume_sq_sum = volume_sq_sum + warped_volume ** 2
+#
+#         del warped_volume, src_feat, proj_mat
+#     del src_feats, proj_mats
+#
+#     count = 1.0 / torch.sum(in_masks, dim=1, keepdim=True)
+#     img_feat[:, -32:] = volume_sq_sum * count - (volume_sum * count) ** 2
+#     del volume_sq_sum, volume_sum, count
+#
+#     return img_feat, in_masks
+#
+#
 # batch_size = 2
 # height = 32
 # width = 42
 # channels = 3
 # padding = 1
-# depth_resolution = 3
+# depth_resolution = 128
 # depth_bounds = torch.tensor([
 #     [1.125, 6.175],
 #     [2.25, 5.75]
@@ -378,3 +435,31 @@ def build_volume_features(
 #
 # print('feat ', torch.allclose(my_f[:1], n_f))
 # print('grid ', torch.allclose(my_g[:1], n_g))
+#
+#
+# padding = 1
+# batch_size = 2
+# feat_height = 23
+# feat_width = 42
+# image_height = feat_height * 4
+# image_width = feat_width * 4
+#
+# images = torch.rand((batch_size, 3, 3, image_height, image_width), dtype=torch.float32)
+# image_features = torch.rand((batch_size, 3, 32, feat_height, feat_width), dtype=torch.float32)
+# image_warp_matrices = torch.rand((batch_size, 3, 3, 4))
+#
+# theirs, _ = build_volume_costvar_img(images[:1], image_features[:1], image_warp_matrices[:1], dv, pad=padding)
+# mine = build_volume_features(
+#     image_features,
+#     images,
+#     # no need for the reference matrix
+#     image_warp_matrices,
+#     # use depth bounds for reference frustrum, which we map back to source views
+#     depth_bounds,
+#     padding=padding,
+#     depth_resolution=128
+# )
+#
+# print(mine[:1].shape)
+# print(theirs.shape)
+# print('vol ', torch.allclose(mine[:1], theirs))

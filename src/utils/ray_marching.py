@@ -77,7 +77,7 @@ def ray_offsets_row(
     height,
     row_index,
     row_batch_size,
-    batch_size=1,
+    batch_size,
     dtype=None,
     device=None
 ):
@@ -146,10 +146,10 @@ def create_rays(ray_offset_function, intrinsics, cameras_to_world):
     # scale offsets with intrinsic parameters and append ones for z values
     # camera_directions.shape [batch_size, ray_count, 3]
     camera_directions = torch.stack(
-        [(
-             x_offsets - intrinsics[:, 0, 2]) / intrinsics[:, 0, 0],
-             (y_offsets - intrinsics[:, 1, 2]) / intrinsics[:, 1, 1],
-             torch.ones_like(x_offsets, dtype=dtype, device=device)
+        [
+            (x_offsets - intrinsics[:, 0, 2]) / intrinsics[:, 0, 0],
+            (y_offsets - intrinsics[:, 1, 2]) / intrinsics[:, 1, 1],
+            torch.ones_like(x_offsets, dtype=dtype, device=device)
          ],
         -1
     )
@@ -219,11 +219,35 @@ def generate_depth_samples(depth_bounds, ray_count, ray_sample_count, generator=
     return sample_lower + (sample_upper - sample_lower) * sample_noise
 
 
+def generate_depth_samples_deterministic(depth_bounds, ray_count, ray_sample_count):
+    batch_size, _ = depth_bounds.shape
+    dtype, device = depth_bounds.dtype, depth_bounds.device
+
+    # generate linear space from near to far
+    # depth_min.shape (batch_size)
+    # depth_max.shape (batch_size)
+    depth_min, depth_max = depth_bounds[:, 0], depth_bounds[:, 1]
+
+    # sample_grid.shape (ray_sample_count, batch_size)
+    sample_grid = torch.linspace(0, 1, steps=ray_sample_count, dtype=dtype, device=device) \
+        .unsqueeze(dim=1) \
+        .expand((-1, batch_size))
+
+    # depth_samples.shape (batch_size, ray_count, ray_sample_count)
+    depth_samples = (depth_min * (1. - sample_grid) + depth_max * sample_grid) \
+        .transpose(0, 1) \
+        .unsqueeze(1) \
+        .expand(-1, ray_count, -1)
+
+    # return.shape: (batch_size, ray_count, ray_sample_count)
+    return depth_samples
+
+
 def get_nd_coordinates(
     point_samples,
-    world_to_camera_target,
-    intrinsic_target,
-    depth_bounds_target,
+    world_to_camera_reference,
+    intrinsic_reference,
+    depth_bounds_reference,
     image_size,
     padding,
 ):
@@ -234,14 +258,14 @@ def get_nd_coordinates(
     :param point_samples: 3D co-ordinates of samples for rays
     :type point_samples: tensor[batch_size, ray_count, ray_sample_count, 3]
 
-    :param world_to_camera_target: World to camera matrix for target view
-    :type world_to_camera_target: tensor[batch_size, 3, 4]
+    :param world_to_camera_reference: World to camera matrix for target view
+    :type world_to_camera_reference: tensor[batch_size, 3, 4]
 
-    :param intrinsic_target: Intrinsic parameters for target view
-    :type intrinsic_target: tensor[batch_size, 3, 3]
+    :param intrinsic_reference: Intrinsic parameters for target view
+    :type intrinsic_reference: tensor[batch_size, 3, 3]
 
-    :param depth_bounds_target: Depth bounds for target view
-    :type depth_bounds_target: tensor[batch_size, 2]
+    :param depth_bounds_reference: Depth bounds for target view
+    :type depth_bounds_reference: tensor[batch_size, 2]
 
     :param image_size: Image dimensions minus one, [width - 1, height - 1]
     :type image_size: tensor[2]
@@ -255,19 +279,19 @@ def get_nd_coordinates(
     # point_samples.shape (batch_size, ray_count, ray_sample_count, 3)
     batch_size, ray_count, ray_sample_count, _ = point_samples.shape
     depth_min_target, depth_max_target = \
-        depth_bounds_target[:, 0].view(batch_size, 1), \
-            depth_bounds_target[:, 1].view(batch_size, 1)
+        depth_bounds_reference[:, 0].view(batch_size, 1), \
+        depth_bounds_reference[:, 1].view(batch_size, 1)
 
     # reshape to be a list of points
     point_samples = point_samples.view(batch_size, -1, 3)
 
     # map from world to target view
-    target_rotation = world_to_camera_target[:, :3, :3]
-    target_translation = world_to_camera_target[:, :3, 3:]
+    target_rotation = world_to_camera_reference[:, :3, :3]
+    target_translation = world_to_camera_reference[:, :3, 3:]
     point_samples = torch.matmul(point_samples, target_rotation.transpose(dim0=1, dim1=2)) + target_translation.reshape(batch_size, 1, 3)
 
     # map to pixel co-ordinates,
-    point_samples_pixel = point_samples @ intrinsic_target.transpose(dim0=1, dim1=2)
+    point_samples_pixel = point_samples @ intrinsic_reference.transpose(dim0=1, dim1=2)
 
     # TODO: what if z values are less than 1 here?
     point_samples_pixel[..., :2] = point_samples_pixel[..., :2] / point_samples_pixel[..., -1:] / image_size.view(1, 1, 2)
@@ -292,7 +316,8 @@ def march_rays(
     ray_count,
     ray_sample_count,
     depth_bounds,
-    padding=12
+    padding,
+    valid = False
 ):
     # fetch tensor dimensions from images
     batch_size, viewpoints, channels, height, width = mvs_images.shape
@@ -300,9 +325,10 @@ def march_rays(
 
     # get target camera data
     target_viewpoint_index = viewpoints - 1
-    world_to_camera_target = world_to_cameras[:, target_viewpoint_index]
-    intrinsic_target = intrinsic_params[:, target_viewpoint_index]
-    depth_bounds_target = depth_bounds[:, target_viewpoint_index]
+    # TODO target here should be ref, 0 hard coded
+    world_to_camera_reference = world_to_cameras[:, 0]
+    intrinsic_reference = intrinsic_params[:, 0]
+    depth_bounds_reference = depth_bounds[:, 0]
     mvs_image_target = mvs_images[:, target_viewpoint_index]
 
     # allocate for just the target viewpoint
@@ -349,6 +375,8 @@ def march_rays(
         # depth_samples.shape: (batch_size, ray_count, ray_sample_count)
         # TODO make the samples argument to this function
         depth_samples = generate_depth_samples(depth_bounds[:, viewpoint], ray_count, ray_sample_count)
+        if valid:
+            depth_samples = generate_depth_samples_deterministic(depth_bounds[:, viewpoint], ray_count, ray_sample_count)
 
         # point_samples.shape (batch_size, ray_count, ray_sample_count, 3)
         point_samples = rays_origin.unsqueeze(dim=2) + depth_samples.unsqueeze(-1) * ray_directions.unsqueeze(dim=2)
@@ -358,9 +386,9 @@ def march_rays(
         image_size = torch.tensor([width - 1, height - 1], device=mvs_images.device, dtype=mvs_images.dtype)
         points_ndc = get_nd_coordinates(
             point_samples,
-            world_to_camera_target,
-            intrinsic_target,
-            depth_bounds_target,
+            world_to_camera_reference,
+            intrinsic_reference,
+            depth_bounds_reference,
             image_size,
             padding
         )

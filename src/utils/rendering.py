@@ -58,6 +58,7 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
     for source_index in range(source_viewpoints):
         # TODO effect of padding here?
         # point_samples_pixel.shape: (batch_size, ray_count, ray_sample_count, 2)
+        # TODO should be ref matrices, not source?
         point_samples_pixel = get_nd_coordinates(
             all_point_samples,
             world_to_cameras[:, source_index],
@@ -71,8 +72,8 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
         # point_samples_pixel.shape: (batch_size, ray_count, ray_sample_count, 2)
         # colours[:].shape: (batch_size, channels, ray_count, ray_sample_count)
 
-        in_mask = ((point_samples_pixel >-1.0)*(point_samples_pixel < 1.0))
-        in_mask = (in_mask[...,0]*in_mask[...,1]).float()
+        in_mask = (point_samples_pixel > -1.0) * (point_samples_pixel < 1.0)
+        in_mask = (in_mask[...,0] * in_mask[...,1]).float()
         #colours[:, (source_index + 1) * channels, :, :] = in_mask.unsqueeze(1)
         #print('nz',torch.count_nonzero(in_mask), in_mask.shape, torch.prod(torch.tensor(list(in_mask.shape))))
 
@@ -81,7 +82,7 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
             point_samples_pixel,
             align_corners=True,
             mode='bilinear',
-            padding_mode='border'
+            padding_mode='zeros'
         ), in_mask.unsqueeze(1)], dim=1)
 
 
@@ -90,15 +91,15 @@ def interpolate_pixel_colours(all_point_samples, mvs_images, world_to_cameras, i
         .view(batch_size * ray_count * ray_sample_count, channels * source_viewpoints)
 
 
-def create_direction_vectors(ray_directions, world_to_camera_target, ray_sample_count):
+def create_direction_vectors(ray_directions, world_to_camera_reference, ray_sample_count):
     """
     Normalize direction vectors and map to reference camera coordinates
 
     :param ray_directions: Ray directions from reference camera
     :type ray_directions: tensor[batch_size, ray_count, 3]
 
-    :param world_to_camera_target: World coordinates to reference camera coordinates
-    :type world_to_camera_target: tensor[batch_size, 3, 4]
+    :param world_to_camera_reference: World coordinates to reference camera coordinates
+    :type world_to_camera_reference: tensor[batch_size, 3, 4]
 
     :return: Direction vectors rotates to reference camera coordinates
     :rtype: tensor[batch_size, ray_count, 3]
@@ -110,7 +111,7 @@ def create_direction_vectors(ray_directions, world_to_camera_target, ray_sample_
     ray_directions = ray_directions / torch.norm(ray_directions, dim=-1).unsqueeze(-1)
 
     #
-    world_to_camera_rotation = world_to_camera_target[:, :3, :3]
+    world_to_camera_rotation = world_to_camera_reference[:, :3, :3]
 
     # TODO copy this for each point
     ray_directions = ray_directions @ world_to_camera_rotation.transpose(dim0=1, dim1=2)
